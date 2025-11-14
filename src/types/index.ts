@@ -5,6 +5,8 @@ export type Platform = {
   description: string;
   icon: string;
   isPro: boolean;
+  // optional character limit for text-based posts
+  charLimit?: number;
 };
 
 // Video types
@@ -27,7 +29,7 @@ export type Clip = {
 };
 
 // Navigation types
-export type ViewType = 'calendar' | 'analytics' | 'social';
+export type ViewType = "calendar" | "analytics" | "social";
 
 // Date types for calendar
 export type CalendarDay = {
