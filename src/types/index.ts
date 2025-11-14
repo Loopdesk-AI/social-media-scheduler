@@ -52,3 +52,6 @@ export type AudienceMetric = {
   label: string;
   value: string;
 };
+
+// Theme type
+export type Theme = 'light' | 'dark';
