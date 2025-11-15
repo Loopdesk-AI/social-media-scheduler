@@ -53,7 +53,10 @@ function ThemeToggle() {
       onClick={toggleTheme}
       aria-label="Toggle theme"
       title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
-      className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-gray-400 hover:text-white hover:bg-gray-800/50"
+      className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+      style={{ color: 'hsl(var(--muted-foreground))' }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = 'hsl(var(--foreground))'; e.currentTarget.style.background = 'hsl(var(--muted))'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = 'hsl(var(--muted-foreground))'; e.currentTarget.style.background = 'transparent'; }}
     >
       {theme === 'dark' ? '☀️' : '🌙'}
     </button>

@@ -1,0 +1,67 @@
+.calendar-slot {
+  min-height: 80px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 4px;
+  background: white;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.calendar-slot:hover {
+  background: #f9fafb;
+}
+
+.calendar-slot.drop-target--active {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  border-width: 2px;
+}
+
+.calendar-slot.drop-target--invalid {
+  background: #fee2e2;
+  border-color: #ef4444;
+  cursor: not-allowed;
+}
+
+.calendar-slot__time {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.calendar-slot--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d1d5db;
+  font-size: 12px;
+}
+
+/* Dark theme support */
+[data-theme="dark"] .calendar-slot {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+}
+
+[data-theme="dark"] .calendar-slot:hover {
+  background: hsl(var(--muted));
+}
+
+[data-theme="dark"] .calendar-slot.drop-target--active {
+  background: hsl(216 34% 17%);
+  border-color: hsl(var(--primary));
+}
+
+[data-theme="dark"] .calendar-slot.drop-target--invalid {
+  background: hsl(0 63% 20%);
+  border-color: hsl(var(--destructive));
+}
+
+[data-theme="dark"] .calendar-slot__time {
+  color: hsl(var(--muted-foreground));
+}
+
+[data-theme="dark"] .calendar-slot--empty {
+  color: hsl(var(--muted-foreground));
+}

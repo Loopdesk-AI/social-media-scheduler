@@ -1,0 +1,43 @@
+.calendar-day {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.calendar-day__header {
+  background: #f9fafb;
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: center;
+}
+
+.calendar-day__date {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.calendar-day__slots {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+/* Dark theme support */
+[data-theme="dark"] .calendar-day {
+  background: hsl(var(--card));
+  border-color: hsl(var(--border));
+}
+
+[data-theme="dark"] .calendar-day__header {
+  background: hsl(var(--muted));
+  border-bottom-color: hsl(var(--border));
+}
+
+[data-theme="dark"] .calendar-day__date {
+  color: hsl(var(--card-foreground));
+}

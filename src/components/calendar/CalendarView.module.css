@@ -1,0 +1,67 @@
+.calendar-view {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.calendar-view__header {
+  margin-bottom: 20px;
+}
+
+.calendar-view__title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.calendar-view__subtitle {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.calendar-view__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.calendar-view__loading {
+  text-align: center;
+  padding: 40px;
+  color: #6b7280;
+}
+
+/* Dark theme support */
+[data-theme="dark"] .calendar-view__title {
+  color: hsl(var(--foreground));
+}
+
+[data-theme="dark"] .calendar-view__subtitle {
+  color: hsl(var(--muted-foreground));
+}
+
+[data-theme="dark"] .calendar-view__loading {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .calendar-view__grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .calendar-view__grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-view__grid {
+    grid-template-columns: 1fr;
+  }
+}

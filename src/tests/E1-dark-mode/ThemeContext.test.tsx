@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ThemeProvider } from './ThemeContext';
-import { useTheme } from './useTheme';
+import { ThemeProvider } from '../../lib/ThemeContext';
+import { useTheme } from '../../lib/useTheme';
 
 function mockMatchMedia(matches = false) {
   Object.defineProperty(window, 'matchMedia', {
@@ -21,7 +20,7 @@ function TestConsumer() {
   );
 }
 
-describe('ThemeContext', () => {
+describe('E1: Dark Mode Toggle', () => {
   beforeEach(() => {
     cleanup();
     localStorage.clear();

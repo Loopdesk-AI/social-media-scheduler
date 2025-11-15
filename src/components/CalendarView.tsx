@@ -1,57 +1,91 @@
-import { ChevronLeft, ChevronRight, Plus, Upload } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import { useState } from 'react';
-import { SchedulePostModal } from './SchedulePostModal';
+import { toast } from 'sonner';
+import type { Platform, Post } from '../types/post';
+import { CreatePostModal } from './CreatePostModal';
+import { MonthCalendarView } from './MonthCalendarView';
+import { PostDetailsModal } from './PostDetailsModal';
 import { UploadVideoModal } from './UploadVideoModal';
 
 export function CalendarView() {
-  const today = new Date();
-  const [currentDate, setCurrentDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-    const days = [];
-    // Add empty cells for days before the first day of the month
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      const prevMonthDay = new Date(year, month, -startingDayOfWeek + i + 1);
-      days.push({
-        date: prevMonthDay,
-        isCurrentMonth: false
-      });
-    }
-    // Add days of the current month
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push({
-        date: new Date(year, month, day),
-        isCurrentMonth: true
-      });
-    }
-    // Add days from next month to complete the grid
-    const remainingCells = 42 - days.length;
-    for (let i = 1; i <= remainingCells; i++) {
-      days.push({
-        date: new Date(year, month + 1, i),
-        isCurrentMonth: false
-      });
-    }
-    return days;
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  
+  // Posts state management
+  const [posts, setPosts] = useState<Post[]>([
+    {
+      id: '1',
+      platform: 'x',
+      content: 'Check out our latest blog post!',
+      scheduledAt: '2025-11-17T10:00:00.000Z',
+      status: 'scheduled',
+    },
+    {
+      id: '2',
+      platform: 'facebook',
+      content: 'Join us for our weekly webinar',
+      scheduledAt: '2025-11-17T14:00:00.000Z',
+      status: 'scheduled',
+    },
+    {
+      id: '3',
+      platform: 'linkedin',
+      content: 'Our team is growing! Check out open positions',
+      scheduledAt: '2025-11-18T09:00:00.000Z',
+      status: 'scheduled',
+    },
+    {
+      id: '4',
+      platform: 'instagram',
+      content: 'Behind the scenes at our office 📸',
+      scheduledAt: '2025-11-19T15:00:00.000Z',
+      status: 'published',
+    },
+  ]);
+
+  // Handle creating a new post
+  const handleCreatePost = (newPost: {
+    platform: Platform;
+    content: string;
+    scheduledAt: string;
+  }) => {
+    const post: Post = {
+      id: `post-${Date.now()}`,
+      ...newPost,
+      status: 'scheduled',
+    };
+    
+    console.log('Creating new post:', post);
+    setPosts((prevPosts) => {
+      const updated = [...prevPosts, post];
+      console.log('Updated posts:', updated);
+      return updated;
+    });
+    toast.success('Post scheduled successfully!');
   };
-  const days = getDaysInMonth(currentDate);
-  const goToPreviousMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+
+  // Handle rescheduling a post via drag-and-drop or modal
+  const handleReschedulePost = (postId: string, newScheduledAt: string) => {
+    setPosts((prevPosts) =>
+      prevPosts.map((post) =>
+        post.id === postId
+          ? { ...post, scheduledAt: newScheduledAt }
+          : post
+      )
+    );
+    toast.success('Post rescheduled successfully!');
   };
-  const goToNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+
+  // Handle post click to show details
+  const handlePostClick = (post: Post) => {
+    setSelectedPost(post);
   };
-  const isToday = (date: Date) => {
-    return date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+
+  // Handle post deletion
+  const handleDeletePost = (postId: string) => {
+    setPosts((prevPosts) => prevPosts.filter((post) => post.id !== postId));
+    toast.success('Post deleted successfully!');
   };
   return (
     <div className="max-w-7xl mx-auto">
@@ -77,62 +111,28 @@ export function CalendarView() {
         </div>
       </div>
 
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{ background: 'hsl(var(--card))', border: '1px solid', borderColor: 'hsl(var(--border))', color: 'hsl(var(--card-foreground))' }}
-      >
-        <div className="flex items-center justify-between p-6" style={{ borderBottom: '1px solid', borderBottomColor: 'hsl(var(--border))' }}>
-          <button onClick={goToPreviousMonth} className="p-2 rounded-lg" style={{ color: 'hsl(var(--muted-foreground))' }}>
-            <ChevronLeft size={20} />
-          </button>
-          <h2 className="text-lg font-semibold">
-            {currentDate.getFullYear()}/{monthNames[currentDate.getMonth()]}
-          </h2>
-          <button onClick={goToNextMonth} className="p-2 rounded-lg" style={{ color: 'hsl(var(--muted-foreground))' }}>
-            <ChevronRight size={20} />
-          </button>
-        </div>
-        <div className="grid grid-cols-7">
-          {daysOfWeek.map(day => (
-            <div
-              key={day}
-              className="text-sm font-medium p-4 text-center"
-              style={{ color: 'hsl(var(--muted-foreground))', borderBottom: '1px solid', borderBottomColor: 'hsl(var(--border))' }}
-            >
-              {day}
-            </div>
-          ))}
-          {days.map((day, index) => {
-            const isNotCurrent = !day.isCurrentMonth;
-            const cellStyle: React.CSSProperties = {
-              minHeight: 120,
-              padding: 12,
-              borderRight: index % 7 === 6 ? '0' : '1px solid',
-              borderBottom: '1px solid',
-              borderRightColor: 'hsl(var(--border))',
-              borderBottomColor: 'hsl(var(--border))',
-              background: isNotCurrent ? 'hsl(var(--muted))' : 'transparent',
-              color: isNotCurrent ? 'hsl(var(--muted-foreground))' : 'hsl(var(--card-foreground))'
-            };
+      {/* Month Calendar with Drag-and-Drop */}
+      <MonthCalendarView
+        posts={posts}
+        onReschedulePost={handleReschedulePost}
+        onPostClick={handlePostClick}
+      />
 
-            const dateCircleStyle: React.CSSProperties = isToday(day.date)
-              ? { background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', width: 24, height: 24, borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }
-              : {};
-
-            return (
-              <div key={index} style={cellStyle}>
-                <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 600 }}>
-                  <span style={dateCircleStyle}>{day.date.getDate()}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {isScheduleModalOpen && <SchedulePostModal onClose={() => setIsScheduleModalOpen(false)} />}
+      {isScheduleModalOpen && (
+        <CreatePostModal 
+          onClose={() => setIsScheduleModalOpen(false)}
+          onCreatePost={handleCreatePost}
+        />
+      )}
       {isUploadModalOpen && <UploadVideoModal onClose={() => setIsUploadModalOpen(false)} />}
+      {selectedPost && (
+        <PostDetailsModal
+          post={selectedPost}
+          onClose={() => setSelectedPost(null)}
+          onReschedule={handleReschedulePost}
+          onDelete={handleDeletePost}
+        />
+      )}
     </div>
   );
 }
- 
