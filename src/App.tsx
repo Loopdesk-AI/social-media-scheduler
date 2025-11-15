@@ -17,8 +17,8 @@ export function App() {
       setActiveView(view);
     }
   };
-  return <div className="flex w-full min-h-screen bg-black">
-      <Toaster position="top-right" theme="dark" />
+  return <div className="flex w-full min-h-screen bg-white dark:bg-black transition-colors duration-200">
+      <Toaster position="top-right" />
       <Navigation activeView={activeView} onNavigate={handleNavigationClick} />
       <div className="flex-1 p-8">
         {activeView === 'calendar' && <CalendarView />}
