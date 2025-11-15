@@ -1,5 +1,5 @@
-import React from 'react';
-import { Calendar, BarChart3, Users } from 'lucide-react';
+import { BarChart3, Calendar, Users } from 'lucide-react';
+import { useTheme } from '../lib/useTheme';
 import { ViewType } from '../types';
 
 type NavigationProps = {
@@ -23,13 +23,42 @@ export function Navigation({
     icon: Users,
     label: 'Social Accounts'
   }];
-  return <div className="w-16 bg-[#0a0a0a] border-r border-gray-800/50 flex flex-col items-center py-6 gap-4">
+  return <div className="w-16 border-r flex flex-col items-center py-6 gap-4" style={{ background: 'hsl(var(--background))', borderRightColor: 'hsl(var(--border))' }}>
+      <div className="mb-4">
+        <ThemeToggle />
+      </div>
       {navItems.map(item => {
       const Icon = item.icon;
       const isActive = activeView === item.id;
-      return <button key={item.id} onClick={() => onNavigate(item.id)} className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${isActive ? 'bg-white text-black' : 'text-gray-400 hover:text-white hover:bg-gray-800/50'}`} title={item.label}>
-            <Icon size={20} />
-          </button>;
+      return (
+      <button
+        key={item.id}
+        onClick={() => onNavigate(item.id)}
+        title={item.label}
+        className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+        style={isActive ? { background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' } : { color: 'hsl(var(--muted-foreground))' }}
+      >
+        <Icon size={20} />
+      </button>
+      );
     })}
+    <div className="mt-auto" />
     </div>;
+}
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  return (
+    <button
+      onClick={toggleTheme}
+      aria-label="Toggle theme"
+      title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+      className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+      style={{ color: 'hsl(var(--muted-foreground))' }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = 'hsl(var(--foreground))'; e.currentTarget.style.background = 'hsl(var(--muted))'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = 'hsl(var(--muted-foreground))'; e.currentTarget.style.background = 'transparent'; }}
+    >
+      {theme === 'dark' ? '☀️' : '🌙'}
+    </button>
+  );
 }
