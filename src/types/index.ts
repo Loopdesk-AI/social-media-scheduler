@@ -52,3 +52,16 @@ export type AudienceMetric = {
   label: string;
   value: string;
 };
+
+// Post types
+export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed';
+
+export type Post = {
+  id: string;
+  content: string;
+  platforms: string[];
+  scheduledDate: Date;
+  status: PostStatus;
+  createdAt: Date;
+  updatedAt: Date;
+};
