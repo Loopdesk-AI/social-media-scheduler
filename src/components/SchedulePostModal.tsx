@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
-import { X, ChevronLeft } from 'lucide-react';
+import { useState } from 'react';
+import { X, ChevronLeft, Play, Upload } from 'lucide-react';
 import { SchedulingForm } from './SchedulingForm';
 import { toast } from 'sonner';
-import { Video, Clip } from '../types';
-import { videos } from '../data/videos';
 import { clips } from '../data/clips';
+import { videos } from '../data/videos';
+import { useApp } from '../contexts/AppContext';
+import { Clip } from '../types';
+import { formatForAPI } from '../lib/dateUtils';
+import { api } from '../lib/api';
 
 type SchedulePostModalProps = {
   onClose: () => void;
@@ -13,219 +16,426 @@ type SchedulePostModalProps = {
 export function SchedulePostModal({
   onClose
 }: SchedulePostModalProps) {
+  const { integrations, createPost } = useApp();
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [selectedClip, setSelectedClip] = useState<Clip | null>(null);
   const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState<Date | null>(null);
   const [scheduledTime, setScheduledTime] = useState<string | null>(null);
+  const [timePeriod, setTimePeriod] = useState<'AM' | 'PM'>('AM');
+  const [activeTab, setActiveTab] = useState<'projects' | 'clips'>('projects');
+  const [postContent, setPostContent] = useState('');
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [platformSpecificContent, setPlatformSpecificContent] = useState<Record<string, string>>({});
+  const [uploadedVideo, setUploadedVideo] = useState<{ path: string; name: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [instagramMediaUrl, setInstagramMediaUrl] = useState(''); // New state for Instagram media URL
+  
   const handleVideoClick = (videoId: string) => {
     setSelectedVideo(videoId);
   };
+  
   const handleBackToProjects = () => {
     setSelectedVideo(null);
     setSelectedClip(null);
   };
+  
   const handleBackToClips = () => {
     setSelectedClip(null);
   };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('video/')) {
+      toast.error('Please select a video file');
+      return;
+    }
+
+    // Validate file size (max 500MB)
+    const maxSize = 500 * 1024 * 1024; // 500MB
+    if (file.size > maxSize) {
+      toast.error('Video file must be less than 500MB');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'video');
+
+      const response: any = await api.uploadMedia(formData);
+      
+      setUploadedVideo({
+        path: response.url || response.path, // Use URL if available, fallback to path
+        name: file.name,
+      });
+      
+      toast.success('Video uploaded successfully!');
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload video');
+    } finally {
+      setUploading(false);
+    }
+  };
+  
   const handleClipClick = (clip: Clip) => {
     setSelectedClip(clip);
   };
+  
   const handleSelectClip = () => {
     setIsScheduling(true);
   };
+  
   const handleBackFromScheduling = () => {
     setIsScheduling(false);
   };
-  const handleSchedule = () => {
-    toast.success('Post successfully scheduled');
-    onClose();
+  
+  const handlePlatformSelectionChange = (platformIds: string[]) => {
+    setSelectedPlatforms(platformIds);
   };
+
+  const handlePlatformContentChange = (platformId: string, content: string) => {
+    setPlatformSpecificContent(prev => ({
+      ...prev,
+      [platformId]: content
+    }));
+  };
+  
+  const handleSchedule = async () => {
+    if (selectedPlatforms.length === 0) {
+      toast.error('Please select at least one social account');
+      return;
+    }
+
+    if (!postContent.trim()) {
+      toast.error('Please enter post content');
+      return;
+    }
+
+    if (!scheduledDate || !scheduledTime) {
+      toast.error('Please select a date and time');
+      return;
+    }
+
+    // Check if YouTube is selected and video is uploaded
+    const hasYouTube = selectedPlatforms.some(platformId => {
+      const integration = integrations.find(i => i.id === platformId);
+      return integration?.providerIdentifier === 'youtube';
+    });
+
+    if (hasYouTube && !uploadedVideo) {
+      toast.error('YouTube requires a video file. Please upload a video.');
+      return;
+    }
+
+    // Check if Instagram is selected and media URL is provided
+    const hasInstagram = selectedPlatforms.some(platformId => {
+      const integration = integrations.find(i => i.id === platformId);
+      return integration?.providerIdentifier === 'instagram';
+    });
+
+    if (hasInstagram && !instagramMediaUrl.trim()) {
+      toast.error('Instagram requires a media URL. Please provide a publicly accessible media URL.');
+      return;
+    }
+
+    try {
+      // Format the date for the API
+      const formattedDate = formatForAPI(scheduledDate, scheduledTime, timePeriod);
+      
+      // For now, we'll create separate posts for each platform
+      // In the future, we'll implement the multi-platform API
+      for (const platformId of selectedPlatforms) {
+        const content = platformSpecificContent[platformId] || postContent;
+        
+        // Get the integration to check the provider
+        const integration = integrations.find(i => i.id === platformId);
+        const isYouTube = integration?.providerIdentifier === 'youtube';
+        const isInstagram = integration?.providerIdentifier === 'instagram';
+        
+        // Prepare media array based on platform
+        let mediaArray = undefined;
+        if (isYouTube && uploadedVideo) {
+          // YouTube uses uploaded video file
+          mediaArray = [{
+            path: uploadedVideo.path,
+            type: 'video',
+          }];
+        } else if (isInstagram && instagramMediaUrl) {
+          // Instagram uses public URL
+          mediaArray = [{
+            path: instagramMediaUrl,
+            type: instagramMediaUrl.match(/\.(mp4|mov|avi|wmv|flv|webm)$/i) ? 'video' : 'image',
+          }];
+        }
+        
+        await createPost({
+          integrationId: platformId,
+          content: content,
+          publishDate: formattedDate,
+          settings: isYouTube ? {
+            // YouTube requires a title
+            title: selectedClip?.title || content.substring(0, 100) || 'Untitled Video',
+            description: content,
+            clipTitle: selectedClip?.title,
+            clipNumber: selectedClip?.number,
+          } : {
+            clipTitle: selectedClip?.title,
+            clipNumber: selectedClip?.number,
+          },
+          media: mediaArray,
+        });
+      }
+      
+      toast.success(`Post scheduled successfully on ${selectedPlatforms.length} platform(s)`);
+      onClose();
+    } catch (error) {
+      // Error already handled in context
+      console.error('Error scheduling post:', error);
+    }
+  };
+  
+  const handleScheduledTimeChange = (date: Date, time: string, period: 'AM' | 'PM') => {
+    setScheduledDate(date);
+    setScheduledTime(time);
+    setTimePeriod(period);
+  };
+  
   const clearScheduledTime = () => {
+    setScheduledDate(null);
     setScheduledTime(null);
   };
+  
+  // Format the display date and time
+  const formatDisplayDateTime = () => {
+    if (!scheduledDate || !scheduledTime) return '';
+    
+    const formattedDate = scheduledDate.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+    
+    return `${formattedDate} at ${scheduledTime} ${timePeriod}`;
+  };
+  
   return <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#0f0f0f] w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden border border-gray-800/50">
-        <div className="p-6">
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                {(selectedVideo || selectedClip || isScheduling) && <button onClick={isScheduling ? handleBackFromScheduling : selectedClip ? handleBackToClips : handleBackToProjects} className="text-gray-400 hover:text-white transition-colors" aria-label="Back">
-                    <ChevronLeft size={20} />
-                  </button>}
-                <h2 className="text-white text-xl font-semibold">
-                  {isScheduling ? 'Schedule post' : selectedClip ? 'Confirm clip to schedule' : selectedVideo ? 'Select clip' : 'Select project'}
-                </h2>
-              </div>
-              {!selectedClip && !isScheduling && <p className="text-gray-400 text-sm">
-                  {selectedVideo ? 'Select a clip to preview and confirm.' : 'Select the project that contains the clip you would like to schedule.'}
-                </p>}
+      <div className="bg-[#0a0a0a] rounded-xl border border-gray-800/50 w-full max-w-4xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-800/50">
+          <h2 className="text-xl font-semibold text-white">
+            {isScheduling ? 'Schedule Post' : selectedClip ? selectedClip.title : selectedVideo ? 'Select Clip' : 'Select Project'}
+          </h2>
+          <button 
+            onClick={onClose}
+            className="p-2 text-gray-400 transition-colors rounded-lg hover:text-white hover:bg-gray-800"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {isScheduling ? (
+            <div className="p-6">
+              <SchedulingForm
+                onPlatformSelectionChange={handlePlatformSelectionChange}
+                onPlatformContentChange={handlePlatformContentChange}
+                onScheduledTimeChange={handleScheduledTimeChange}
+                initialPostContent={postContent}
+                onPostContentChange={setPostContent}
+                onVideoUpload={handleVideoUpload}
+                uploadedVideo={uploadedVideo}
+                uploading={uploading}
+                selectedPlatforms={selectedPlatforms}
+                integrations={integrations}
+                onInstagramMediaUrlChange={setInstagramMediaUrl} // Pass the handler
+              />
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors p-1 hover:bg-gray-800/50 rounded-md" aria-label="Close">
-              <X size={20} />
-            </button>
-          </div>
-          {isScheduling && selectedClip ? <>
-              <SchedulingForm clipTitle={selectedClip.title} clipNumber={selectedClip.number} />
-              {/* Bottom bar with scheduled time and schedule button */}
-              <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-800/50">
-                <div className="flex-1">
-                  {scheduledTime && <div className="flex items-center gap-2 bg-[#1a1a1a] text-white px-4 py-2 rounded-lg border border-gray-800/50 inline-flex">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                      <span className="text-sm">{scheduledTime}</span>
-                      <button onClick={clearScheduledTime} className="text-gray-400 hover:text-white transition-colors ml-2">
-                        <X size={16} />
-                      </button>
-                    </div>}
-                </div>
-                <button onClick={handleSchedule} className="bg-white text-black font-medium px-8 py-2 rounded-lg hover:bg-gray-100 transition-colors">
-                  Schedule
+          ) : selectedClip ? (
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <button 
+                  onClick={handleBackToProjects}
+                  className="p-2 text-gray-400 transition-colors rounded-lg hover:text-white hover:bg-gray-800"
+                >
+                  <ChevronLeft size={20} />
                 </button>
+                <h3 className="text-lg font-medium text-white">{selectedClip.title}</h3>
               </div>
-            </> : selectedClip ? <div className="flex gap-6">
-              <div className="w-[280px] flex-shrink-0">
-                <div className="relative bg-gray-900 rounded-lg overflow-hidden">
-                  <div className="flex flex-col">
-                    <div className="relative">
-                      <img src={selectedClip.thumbnail1} alt="" className="w-full aspect-video object-cover" />
-                    </div>
-                    <div className="relative">
-                      <img src={selectedClip.thumbnail2} alt="" className="w-full aspect-video object-cover" />
-                    </div>
+              
+              <div className="bg-[#1a1a1a] rounded-lg border border-gray-800/50 overflow-hidden">
+                <div className="relative pt-[56.25%]"> {/* 16:9 aspect ratio */}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black">
+                    <Play size={48} className="text-white/80" />
                   </div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <button className="w-16 h-16 rounded-full bg-white/90 hover:bg-white flex items-center justify-center transition-colors">
-                      <Play size={24} className="text-black ml-1" fill="black" />
+                </div>
+                
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm text-gray-400">Clip #{selectedClip.number}</span>
+                    <span className="text-sm text-gray-400">{selectedClip.duration}</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                        <span className="text-xs font-medium text-white">YT</span>
+                      </div>
+                      <span className="text-sm text-gray-300">YouTube</span>
+                    </div>
+                    
+                    <button 
+                      onClick={handleSelectClip}
+                      className="px-4 py-2 text-sm font-medium text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700"
+                    >
+                      Select Clip
                     </button>
                   </div>
-                  <div className="absolute bottom-3 left-3 bg-black/80 text-white text-xs font-medium px-2 py-1 rounded">
-                    00:00 / {selectedClip.duration}
-                  </div>
                 </div>
               </div>
-              <div className="flex-1 max-h-[500px] overflow-y-auto pr-2">
-                <h3 className="text-white text-lg font-medium mb-4">
-                  #{selectedClip.number} {selectedClip.title}
+            </div>
+          ) : selectedVideo ? (
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <button 
+                  onClick={handleBackToProjects}
+                  className="p-2 text-gray-400 transition-colors rounded-lg hover:text-white hover:bg-gray-800"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <h3 className="text-lg font-medium text-white">
+                  {videos.find(v => v.id === selectedVideo)?.title || 'Unknown Project'}
                 </h3>
-                <div className="mb-6">
-                  <div className="text-green-500 text-4xl font-bold mb-4">
-                    96<span className="text-2xl text-gray-400">/100</span>
-                  </div>
-                  <div className="flex gap-2 mb-6">
-                    <div className="bg-[#1a1a1a] rounded-lg px-3 py-2 border border-gray-800">
-                      <div className="text-green-400 text-sm font-semibold mb-0.5">
-                        A-
-                      </div>
-                      <div className="text-gray-400 text-xs">Hook</div>
-                    </div>
-                    <div className="bg-[#1a1a1a] rounded-lg px-3 py-2 border border-gray-800">
-                      <div className="text-green-400 text-sm font-semibold mb-0.5">
-                        A
-                      </div>
-                      <div className="text-gray-400 text-xs">Flow</div>
-                    </div>
-                    <div className="bg-[#1a1a1a] rounded-lg px-3 py-2 border border-gray-800">
-                      <div className="text-green-400 text-sm font-semibold mb-0.5">
-                        A-
-                      </div>
-                      <div className="text-gray-400 text-xs">Engagement</div>
-                    </div>
-                    <div className="bg-[#1a1a1a] rounded-lg px-3 py-2 border border-gray-800">
-                      <div className="text-green-400 text-sm font-semibold mb-0.5">
-                        A-
-                      </div>
-                      <div className="text-gray-400 text-xs">Trend</div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <p className="text-gray-300 text-sm leading-relaxed">
-                      The beginning of the video could be more
-                      attention-grabbing. One suggestion could be starting with
-                      a surprising fact about the impact of continuous change on
-                      memberships.
-                    </p>
-                    <div>
-                      <div className="text-white font-medium text-sm mb-2">
-                        Summary
-                      </div>
-                      <p className="text-gray-400 text-sm leading-relaxed">
-                        It's like that the continuous change in whatever that
-                        topic is or industry is like it gives a valid reason for
-                        why you should be in a membership right Like you know
-                        for example like if it's a YouTube membership like it's
-                        how to be a successful YouTuber youtube is always
-                        changing so i'm gonna keep paying for my membership
-                        because i wanna you know stay up with the changes and
-                        all the things with this thought leader um you know we
-                        have some We've had some clients that...
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <button onClick={handleSelectClip} className="w-full bg-white text-black font-medium py-3 rounded-lg hover:bg-gray-100 transition-colors">
-                  Select Clip
-                </button>
               </div>
-            </div> : !selectedVideo ? <>
-              <div className="flex items-center justify-between mb-6">
-                <button className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'projects' ? 'bg-[#1a1a1a] text-white' : 'text-gray-400 hover:text-white'}`} onClick={() => setActiveTab('projects')}>
-                  Projects
-                </button>
-                <button className="flex items-center gap-2 text-gray-300 hover:text-white px-4 py-2 rounded-lg transition-colors border border-gray-800/50 hover:border-gray-700">
-                  <Upload size={16} />
-                  Upload own video
-                </button>
-              </div>
-              <div className="grid grid-cols-4 gap-4 max-h-[500px] overflow-y-auto pr-2">
-                {videos.map(video => <button key={video.id} onClick={() => handleVideoClick(video.id)} className="group relative bg-[#1a1a1a] rounded-lg overflow-hidden hover:ring-2 hover:ring-white/20 transition-all">
-                    <div className="relative aspect-video bg-gray-900">
-                      <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />
-                      <div className="absolute top-2 left-2 bg-black/80 text-white text-xs font-medium px-2 py-1 rounded">
-                        {video.duration}
+              
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {clips
+                  .map(clip => (
+                    <div 
+                      key={clip.id}
+                      onClick={() => handleClipClick(clip)}
+                      className="bg-[#1a1a1a] rounded-lg border border-gray-800/50 overflow-hidden cursor-pointer hover:border-gray-700 transition-colors"
+                    >
+                      <div className="relative pt-[56.25%]"> {/* 16:9 aspect ratio */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black">
+                          <Play size={32} className="text-white/80" />
+                        </div>
                       </div>
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                        <div className="text-white text-5xl font-light">
-                          Video
+                      
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-white truncate">{clip.title}</h4>
+                          <span className="text-xs text-gray-400">#{clip.number}</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-400">{clip.duration}</span>
                         </div>
                       </div>
                     </div>
-                    <div className="p-3">
-                      <div className="text-white text-sm font-medium mb-1 text-left truncate">
-                        {video.title}
-                      </div>
-                      <div className="text-gray-500 text-xs text-left">
-                        {video.status}
-                      </div>
-                    </div>
-                  </button>)}
+                  ))}
               </div>
-            </> : <div className="grid grid-cols-4 gap-4 max-h-[500px] overflow-y-auto pr-2">
-              {clips.map(clip => <button key={clip.id} onClick={() => handleClipClick(clip)} className="group relative bg-[#1a1a1a] rounded-lg overflow-hidden hover:ring-2 hover:ring-white/20 transition-all">
-                  <div className="relative aspect-video bg-gray-900">
-                    <div className="flex flex-col h-full">
-                      <div className="flex-1 relative">
-                        <img src={clip.thumbnail1} alt="" className="w-full h-full object-cover" />
-                      </div>
-                      <div className="flex-1 relative">
-                        <img src={clip.thumbnail2} alt="" className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="p-6">
+              <div className="flex gap-2 mb-6">
+                <button
+                  onClick={() => setActiveTab('projects')}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    activeTab === 'projects'
+                      ? 'bg-white text-black'
+                      : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                  }`}
+                >
+                  Projects
+                </button>
+                <button
+                  onClick={() => setActiveTab('clips')}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    activeTab === 'clips'
+                      ? 'bg-white text-black'
+                      : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                  }`}
+                >
+                  Clips
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {(activeTab === 'projects' ? videos : clips).map(item => (
+                  <div 
+                    key={item.id}
+                    onClick={() => 
+                      activeTab === 'projects' 
+                        ? handleVideoClick(item.id) 
+                        : handleClipClick(item as Clip)
+                    }
+                    className="bg-[#1a1a1a] rounded-lg border border-gray-800/50 overflow-hidden cursor-pointer hover:border-gray-700 transition-colors"
+                  >
+                    <div className="relative pt-[56.25%]"> {/* 16:9 aspect ratio */}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black">
+                        <Play size={32} className="text-white/80" />
                       </div>
                     </div>
-                    <div className="absolute top-2 left-2 bg-black/80 text-white text-xs font-medium px-2 py-1 rounded">
-                      {clip.duration}
+                    
+                    <div className="p-4">
+                      <h3 className="font-medium text-white truncate">
+                        {item.title}
+                      </h3>
+                      {'duration' in item && (
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-xs text-gray-400">{item.duration}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="p-3">
-                    <div className="text-white text-sm font-medium text-left truncate">
-                      #{clip.number} {clip.title}
-                    </div>
-                  </div>
-                </button>)}
-            </div>}
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+        
+        {/* Footer */}
+        {isScheduling && (
+          <div className="p-6 border-t border-gray-800/50">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-400">
+                {scheduledDate && scheduledTime && (
+                  <span>
+                    Scheduled for {formatDisplayDateTime()}
+                    <button 
+                      onClick={clearScheduledTime}
+                      className="ml-2 text-red-400 hover:text-red-300"
+                    >
+                      (Clear)
+                    </button>
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleBackFromScheduling}
+                  className="px-4 py-2 text-sm font-medium text-gray-300 transition-colors rounded-lg hover:text-white hover:bg-gray-800"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleSchedule}
+                  disabled={selectedPlatforms.length === 0}
+                  className="px-4 py-2 text-sm font-medium text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Schedule Post
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>;
 }

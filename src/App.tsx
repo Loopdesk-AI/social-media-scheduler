@@ -1,14 +1,36 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { SocialAccountsModal } from './components/SocialAccountsModal';
 import { Navigation } from './components/Navigation';
 import { CalendarView } from './components/CalendarView';
 import { AnalyticsView } from './components/AnalyticsView';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import { ViewType } from './types';
+import { useApp } from './contexts/AppContext';
 
 export function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewType>('calendar');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { refreshIntegrations } = useApp();
+
+  // Handle OAuth callback
+  useEffect(() => {
+    const integration = searchParams.get('integration');
+    const error = searchParams.get('error');
+    const provider = searchParams.get('provider');
+
+    if (integration === 'success') {
+      toast.success(`${provider || 'Account'} connected successfully!`);
+      refreshIntegrations();
+      // Clear query params
+      setSearchParams({});
+    } else if (error) {
+      toast.error(`Integration failed: ${decodeURIComponent(error)}`);
+      // Clear query params
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams, refreshIntegrations]);
 
   const handleNavigationClick = (view: ViewType) => {
     if (view === 'social') {
@@ -17,7 +39,9 @@ export function App() {
       setActiveView(view);
     }
   };
-  return <div className="flex w-full min-h-screen bg-black">
+
+  return (
+    <div className="flex w-full min-h-screen bg-black">
       <Toaster position="top-right" theme="dark" />
       <Navigation activeView={activeView} onNavigate={handleNavigationClick} />
       <div className="flex-1 p-8">
@@ -25,5 +49,6 @@ export function App() {
         {activeView === 'analytics' && <AnalyticsView />}
       </div>
       {isModalOpen && <SocialAccountsModal onClose={() => setIsModalOpen(false)} />}
-    </div>;
+    </div>
+  );
 }

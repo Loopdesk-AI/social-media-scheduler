@@ -1,0 +1,106 @@
+// Prisma schema for social media scheduler
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String              @id @default(uuid())
+  email             String              @unique
+  password          String?
+  name              String?
+  timezone          Int                 @default(0)
+  integrations      Integration[]
+  posts             Post[]
+  media             Media[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([email])
+}
+
+model Integration {
+  id                 String       @id @default(cuid())
+  internalId         String       // Platform-specific account ID (e.g., Instagram account ID)
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String       // Account display name
+  picture            String?      // Profile picture URL
+  providerIdentifier String       // 'instagram', 'youtube', 'google-drive', 'dropbox'
+  type               String       // 'social' or 'storage'
+  token              String       // Encrypted access token
+  refreshToken       String?      // Encrypted refresh token
+  tokenExpiration    DateTime?    // Token expiration date
+  disabled           Boolean      @default(false)
+  refreshNeeded      Boolean      @default(false)
+  profile            String?      // Additional profile data (JSON)
+  posts              Post[]
+  deletedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([userId, internalId])
+  @@index([userId])
+  @@index([providerIdentifier])
+  @@index([refreshNeeded])
+  @@index([deletedAt])
+}
+
+model Post {
+  id             String       @id @default(cuid())
+  state          State        @default(QUEUE)
+  publishDate    DateTime
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integrationId  String
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  content        String       @db.Text // Post caption/description
+  group          String       // UUID for multi-platform posts
+  settings       String?      @db.Text // Platform-specific settings (JSON)
+  releaseId      String?      // Platform post ID
+  releaseURL     String?      // Published post URL
+  error          String?      @db.Text // Error message if failed
+  jobId          String?      // BullMQ job ID
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([integrationId])
+  @@index([state])
+  @@index([publishDate])
+  @@index([group])
+  @@index([deletedAt])
+}
+
+model Media {
+  id                 String       @id @default(uuid())
+  name               String
+  path               String       // Storage path or URL
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thumbnail          String?      // Thumbnail path
+  thumbnailTimestamp Int?         // Video thumbnail timestamp (seconds)
+  type               String       // 'image' or 'video'
+  fileSize           Int          @default(0)
+  deletedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([type])
+  @@index([deletedAt])
+}
+
+enum State {
+  QUEUE
+  PUBLISHED
+  ERROR
+  DRAFT
+}
