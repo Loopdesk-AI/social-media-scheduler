@@ -21,11 +21,18 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
   const [content, setContent] = useState('');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedTime, setSelectedTime] = useState('12:00');
+  const [platform, setPlatform] = useState<string | null>(null); // Added platform state
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<{ id: string; name: string; content: string } | null>(null);
 
+  // Template selection with variable substitution
   const handleTemplateSelect = (templateContent: string) => {
-    setContent(prev => prev + templateContent);
+    const substituted = templateContent
+      .replace("{DATE}", selectedDate ? format(selectedDate, "PPP") : "")
+      .replace("{PLATFORM}", platform || "")
+      .replace("{USERNAME}", "User"); // Replace with actual username if available
+
+    setContent(prev => prev + substituted);
   };
 
   const handleTemplateEdit = (template: { id: string; name: string; content: string }) => {
@@ -34,25 +41,32 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
   };
 
   const handleSubmit = () => {
-    console.log('Post scheduled:', { content, date: selectedDate, time: selectedTime });
+    console.log('Post scheduled:', { content, date: selectedDate, time: selectedTime, platform });
     onClose();
   };
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
         <DialogContent className="sm:max-w-2xl max-h-screen overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Schedule New Post</DialogTitle>
           </DialogHeader>
 
           <div className="grid gap-6 py-4">
-            {/* Platform placeholder */}
+            {/* Platform selection */}
             <div className="grid gap-2">
               <Label>Platform</Label>
               <div className="flex gap-3">
                 {['Twitter', 'LinkedIn', 'Instagram'].map(p => (
-                  <Button key={p} variant="outline" size="sm">{p}</Button>
+                  <Button
+                    key={p}
+                    variant={platform === p ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPlatform(p)}
+                  >
+                    {p}
+                  </Button>
                 ))}
               </div>
             </div>
@@ -90,7 +104,10 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
                 <Label>Date</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}>
+                    <Button
+                      variant="outline"
+                      className={cn("justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
+                    >
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
                     </Button>
@@ -144,3 +161,4 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
     </>
   );
 }
+
