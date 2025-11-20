@@ -11,7 +11,6 @@ import { format } from 'date-fns';
 import { CalendarIcon, Image, Paperclip } from 'lucide-react';
 import TemplateModal from './templates/TemplateModal';
 import TemplatesList from './templates/TemplatesList';
-import { useTemplates } from '@/context/TemplatesContext';
 
 interface SchedulePostModalProps {
   isOpen: boolean;
@@ -35,7 +34,6 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
   };
 
   const handleSubmit = () => {
-    // In real app this would save the post
     console.log('Post scheduled:', { content, date: selectedDate, time: selectedTime });
     onClose();
   };
@@ -49,7 +47,7 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
           </DialogHeader>
 
           <div className="grid gap-6 py-4">
-            {/* Platform selector placeholder */}
+            {/* Platform placeholder */}
             <div className="grid gap-2">
               <Label>Platform</Label>
               <div className="flex gap-3">
@@ -117,7 +115,7 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
               </div>
             </div>
 
-            {/* Attachments placeholder */}
+            {/* Attachments */}
             <div className="flex gap-3">
               <Button variant="outline" size="icon">
                 <Image className="h-4 w-4" />
@@ -135,7 +133,6 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
         </DialogContent>
       </Dialog>
 
-      {/* Template Create/Edit Modal */}
       <TemplateModal
         isOpen={templateModalOpen}
         onClose={() => {
