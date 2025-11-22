@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { CalendarIcon, Image, Paperclip } from 'lucide-react';
 import TemplateModal from './templates/TemplateModal';
 import TemplatesList from './templates/TemplatesList';
+import CharacterCounter from './post/CharacterCounter';
 
 interface SchedulePostModalProps {
   isOpen: boolean;
@@ -21,18 +22,12 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
   const [content, setContent] = useState('');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedTime, setSelectedTime] = useState('12:00');
-  const [platform, setPlatform] = useState<string | null>(null); // Added platform state
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<{ id: string; name: string; content: string } | null>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState('Twitter');
 
-  // Template selection with variable substitution
   const handleTemplateSelect = (templateContent: string) => {
-    const substituted = templateContent
-      .replace("{DATE}", selectedDate ? format(selectedDate, "PPP") : "")
-      .replace("{PLATFORM}", platform || "")
-      .replace("{USERNAME}", "User"); // Replace with actual username if available
-
-    setContent(prev => prev + substituted);
+    setContent(prev => prev + templateContent);
   };
 
   const handleTemplateEdit = (template: { id: string; name: string; content: string }) => {
@@ -41,32 +36,25 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
   };
 
   const handleSubmit = () => {
-    console.log('Post scheduled:', { content, date: selectedDate, time: selectedTime, platform });
+    console.log('Post scheduled:', { content, date: selectedDate, time: selectedTime });
     onClose();
   };
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-2xl max-h-screen overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Schedule New Post</DialogTitle>
           </DialogHeader>
 
           <div className="grid gap-6 py-4">
-            {/* Platform selection */}
+            {/* Platform */}
             <div className="grid gap-2">
               <Label>Platform</Label>
               <div className="flex gap-3">
                 {['Twitter', 'LinkedIn', 'Instagram'].map(p => (
-                  <Button
-                    key={p}
-                    variant={platform === p ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setPlatform(p)}
-                  >
-                    {p}
-                  </Button>
+                  <Button key={p} variant={selectedPlatform === p ? 'default' : 'outline'} size="sm" onClick={() => setSelectedPlatform(p)}>{p}</Button>
                 ))}
               </div>
             </div>
@@ -86,6 +74,7 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
                 placeholder="What's happening?"
                 rows={8}
               />
+              <CharacterCounter content={content} platform={selectedPlatform} />
             </div>
 
             {/* Templates List */}
@@ -106,7 +95,10 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
-                      className={cn("justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
+                      className={cn(
+                        "justify-start text-left font-normal",
+                        !selectedDate && "text-muted-foreground"
+                      )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
@@ -161,4 +153,3 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
     </>
   );
 }
-
