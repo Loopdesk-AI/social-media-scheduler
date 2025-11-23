@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { X, Upload } from 'lucide-react';
+import { useState, useRef, DragEvent, ChangeEvent } from 'react';
+import { X } from 'lucide-react';
 type UploadVideoModalProps = {
   onClose: () => void;
 };
@@ -8,15 +8,15 @@ export function UploadVideoModal({
 }: UploadVideoModalProps) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
   };
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = (e: DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
   };
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const files = e.dataTransfer.files;
@@ -31,7 +31,7 @@ export function UploadVideoModal({
   const handleClick = () => {
     fileInputRef.current?.click();
   };
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       handleFileSelect(files[0]);

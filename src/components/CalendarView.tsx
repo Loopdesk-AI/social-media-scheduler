@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Upload } from 'lucide-react';
-import { SchedulePostModal } from './SchedulePostModal';
+import SchedulePostModal from './SchedulePostModal';
 import { UploadVideoModal } from './UploadVideoModal';
-import { CalendarDay } from '../types';
 
 export function CalendarView() {
   const today = new Date();
@@ -91,7 +90,7 @@ export function CalendarView() {
             </div>)}
         </div>
       </div>
-      {isScheduleModalOpen && <SchedulePostModal onClose={() => setIsScheduleModalOpen(false)} />}
+  {isScheduleModalOpen && <SchedulePostModal isOpen={isScheduleModalOpen} onClose={() => setIsScheduleModalOpen(false)} />}
       {isUploadModalOpen && <UploadVideoModal onClose={() => setIsUploadModalOpen(false)} />}
     </div>;
 }

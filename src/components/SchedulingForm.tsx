@@ -1,17 +1,14 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, Plus, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCurrentTimezone } from '../lib/dateUtils';
-import { SchedulingDay } from '../types';
+// import { SchedulingDay } from '../types'; (unused)
 
 type SchedulingFormProps = {
-  clipTitle: string;
-  clipNumber: number;
+  clipTitle?: string;
+  clipNumber?: number;
 };
 
-export function SchedulingForm({
-  clipTitle,
-  clipNumber
-}: SchedulingFormProps) {
+export function SchedulingForm(_props: SchedulingFormProps) {
   const today = new Date();
   const [isPlatformDropdownOpen, setIsPlatformDropdownOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(today);

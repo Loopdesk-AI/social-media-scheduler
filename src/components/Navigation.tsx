@@ -1,4 +1,4 @@
-import React from 'react';
+// React import not required with the automatic JSX runtime
 import { Calendar, BarChart3, Users } from 'lucide-react';
 import { ViewType } from '../types';
 
