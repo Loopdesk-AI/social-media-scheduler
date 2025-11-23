@@ -12,6 +12,7 @@ import { CalendarIcon, Image, Paperclip } from 'lucide-react';
 import TemplateModal from './templates/TemplateModal';
 import TemplatesList from './templates/TemplatesList';
 import CharacterCounter from './post/CharacterCounter';
+import { usePosts } from '@/context/PostsContext';
 import PlatformPreview from './preview/PlatformPreview';
 
 interface SchedulePostModalProps {
@@ -26,6 +27,7 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<{ id: string; name: string; content: string } | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState('Twitter');
+  const { addPost } = usePosts();
 
   const handleTemplateSelect = (templateContent: string) => {
     setContent(prev => prev + templateContent);
@@ -37,7 +39,19 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
   };
 
   const handleSubmit = () => {
-    console.log('Post scheduled:', { content, date: selectedDate, time: selectedTime });
+    // add to posts context
+    try {
+      const dateStr = selectedDate ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}` : '';
+      addPost({
+        date: dateStr,
+        time: selectedTime,
+        platform: selectedPlatform,
+        status: 'scheduled',
+        content,
+      });
+    } catch (e) {
+      console.error('Failed to add post', e);
+    }
     onClose();
   };
 

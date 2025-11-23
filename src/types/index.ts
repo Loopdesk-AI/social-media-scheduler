@@ -52,3 +52,13 @@ export type AudienceMetric = {
   label: string;
   value: string;
 };
+
+// Post type for scheduling
+export type Post = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  time: string; // human readable, e.g., '12:00 PM'
+  platform: string;
+  status: 'scheduled' | 'published' | 'draft' | string;
+  content: string;
+};
