@@ -12,6 +12,7 @@ import { CalendarIcon, Image, Paperclip } from 'lucide-react';
 import TemplateModal from './templates/TemplateModal';
 import TemplatesList from './templates/TemplatesList';
 import CharacterCounter from './post/CharacterCounter';
+import PlatformPreview from './preview/PlatformPreview';
 
 interface SchedulePostModalProps {
   isOpen: boolean;
@@ -87,6 +88,16 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
               }}
             />
 
+            {/* Live Preview */}
+            <div>
+              <Label>Preview</Label>
+              <PlatformPreview
+                platform={selectedPlatform.toLowerCase() as 'twitter' | 'linkedin' | 'instagram'}
+                content={content}
+                username="You"
+              />
+            </div>
+
             {/* Date & Time */}
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
@@ -153,3 +164,4 @@ export default function SchedulePostModal({ isOpen, onClose }: SchedulePostModal
     </>
   );
 }
+
