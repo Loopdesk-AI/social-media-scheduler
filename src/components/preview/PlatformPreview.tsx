@@ -12,14 +12,14 @@ interface PlatformPreviewProps {
 
 const previews = {
   twitter: {
-    bg: 'bg-white',
-    text: 'text-black',
-    border: 'border-gray-300',
+    bg: 'bg-card',
+    text: 'text-card-foreground',
+    border: 'border-border',
   },
   linkedin: {
-    bg: 'bg-white',
-    text: 'text-black',
-    border: 'border-gray-300',
+    bg: 'bg-card',
+    text: 'text-card-foreground',
+    border: 'border-border',
   },
   instagram: {
     bg: 'bg-gradient-to-tr from-purple-600 via-pink-500 to-yellow-500',
@@ -46,7 +46,7 @@ export default function PlatformPreview({ platform, content, username = 'yournam
                   <span className="text-gray-500">@handle</span>
                 </div>
                 <p className="mt-2">{content}</p>
-                <div className="flex gap-8 mt-4 text-gray-500">
+                <div className="flex gap-8 mt-4 text-muted-foreground">
                   <Button variant="ghost" size="sm"><MessageCircle className="h-5 w-5" /></Button>
                   <Button variant="ghost" size="sm"><Repeat2 className="h-5 w-5" /></Button>
                   <Button variant="ghost" size="sm"><Heart className="h-5 w-5" /></Button>
@@ -69,7 +69,7 @@ export default function PlatformPreview({ platform, content, username = 'yournam
               </div>
             </div>
             <p className="mt-4">{content}</p>
-            <div className="flex gap-4 mt-6 text-gray-600">
+            <div className="flex gap-4 mt-6 text-muted-foreground">
               <Button variant="ghost">Like</Button>
               <Button variant="ghost">Comment</Button>
               <Button variant="ghost">Repost</Button>
@@ -89,7 +89,7 @@ export default function PlatformPreview({ platform, content, username = 'yournam
               </div>
             </div>
             <div className="bg-gray-200 border-2 border-dashed rounded-xl w-full h-96" />
-            <div className="p-4 flex justify-between text-white">
+            <div className="p-4 flex justify-between text-card-foreground">
               <div className="flex gap-6">
                 <Heart className="h-6 w-6" />
                 <MessageCircle className="h-6 w-6" />
@@ -97,7 +97,7 @@ export default function PlatformPreview({ platform, content, username = 'yournam
               </div>
               <Bookmark className="h-6 w-6" />
             </div>
-            <p className="px-4 pb-4 text-white">{content}</p>
+            <p className="px-4 pb-4 text-card-foreground">{content}</p>
           </div>
         )}
       </CardContent>

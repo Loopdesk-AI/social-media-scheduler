@@ -15,7 +15,8 @@ export const DialogContent = React.forwardRef<
     <RadixDialog.Content
       ref={ref}
       className={cn(
-        'fixed top-1/2 left-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-md bg-white p-6 shadow-lg',
+        // use theme-aware tokens so the dialog respects light/dark variables
+        'fixed top-1/2 left-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-md bg-popover text-popover-foreground p-6 shadow-lg',
         className
       )}
       {...props}
