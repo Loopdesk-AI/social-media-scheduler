@@ -1,4 +1,4 @@
-import React from 'react';
+// React import not required with the automatic JSX runtime
 import { Platform } from '../types';
 
 type PlatformCardProps = {

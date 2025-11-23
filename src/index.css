@@ -79,3 +79,36 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* Make native date inputs theme-aware and remove default native background on WebKit */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  /* Use theme tokens so the date input matches light/dark modes */
+  background: hsl(var(--input));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  padding: 0.5rem 0.5rem;
+  border-radius: 0.375rem;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  background: transparent;
+  color: inherit;
+  filter: invert(1) grayscale(1) contrast(1);
+}
+
+/* Style internal datetime fields (WebKit) so their background is transparent */
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  background: transparent;
+  color: inherit;
+}
+
+/* Firefox: make sure the inner text uses theme colors */
+input[type="date"]::-moz-focus-inner {
+  border: 0;
+}

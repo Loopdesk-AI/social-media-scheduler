@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Plus } from 'lucide-react';
 import { PlatformCard } from './PlatformCard';
 import { PlatformSelector } from './PlatformSelector';
@@ -12,7 +12,6 @@ export function SocialAccountsModal({
   onClose
 }: SocialAccountsModalProps) {
   const [view, setView] = useState<'add' | 'connections'>('connections');
-  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   return <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-[#0f0f0f] w-full max-w-lg rounded-xl shadow-2xl overflow-hidden border border-gray-800/50">
         <div className="p-6">
@@ -26,7 +25,6 @@ export function SocialAccountsModal({
           </div>
           {view === 'add' ? <div className="grid grid-cols-2 gap-3">
               {platforms.map(platform => <PlatformCard key={platform.id} platform={platform} onClick={() => {
-            setSelectedPlatform(platform.id);
             setView('connections');
           }} />)}
             </div> : <div className="space-y-5">
