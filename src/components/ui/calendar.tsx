@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+
 type CalendarProps = {
 	mode?: "single" | "range";
 	selected?: Date | undefined;
@@ -17,17 +19,20 @@ export function Calendar({ selected, onSelect }: CalendarProps) {
 	return (
 		<div className="p-3">
 			{/* Minimal calendar replacement: native date input */}
-			<input
-				type="date"
-				className="border rounded px-2 py-1"
-				value={formatDateForInput(selected)}
-				onChange={(e) => {
-					const v = e.target.value;
-					if (!v) return onSelect(undefined);
-					const d = new Date(v + "T00:00:00");
-					onSelect(d);
-				}}
-			/>
+				<input
+					type="date"
+					className={cn(
+						"appearance-none rounded-md border bg-background text-foreground",
+						"border rounded px-2 py-1"
+					)}
+					value={formatDateForInput(selected)}
+					onChange={(e) => {
+						const v = e.target.value;
+						if (!v) return onSelect(undefined);
+						const d = new Date(v + "T00:00:00");
+						onSelect(d);
+					}}
+				/>
 		</div>
 	);
 }
