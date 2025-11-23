@@ -58,7 +58,7 @@ src/
 
 # Loopdesk - Social Media Scheduler
 
-A modern React + TypeScript application for managing and scheduling posts across multiple social media platforms, including YouTube, TikTok, LinkedIn, Facebook, Instagram, and X (Twitter).
+A modern React + TypeScript application for managing and scheduling posts across multiple social media platforms, including LinkedIn,Instagram and X (Twitter).
 
 ---
 
