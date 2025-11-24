@@ -69,6 +69,8 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    console.log(`🔍 API request - URL: ${url}`);
+
     const config: RequestInit = {
       ...options,
       headers: {
@@ -78,18 +80,28 @@ class ApiClient {
     };
 
     try {
+      console.log(`🔄 Sending API request...`);
       const response = await fetch(url, config);
+      console.log(`✅ API response - Status: ${response.status}`);
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({
           message: response.statusText,
         }));
+        console.error(`❌ API error response:`, error);
         throw new Error(error.message || `HTTP ${response.status}`);
       }
 
-      return response.json();
+      const result = response.json();
+      result.then(data => {
+        console.log(`✅ API response data:`, data);
+      }).catch(err => {
+        console.error(`❌ Error parsing API response:`, err);
+      });
+
+      return result;
     } catch (error) {
-      console.error('API request failed:', error);
+      console.error('❌ API request failed:', error);
       throw error;
     }
   }
@@ -155,7 +167,7 @@ class ApiClient {
   async uploadMedia(formData: FormData) {
     const url = `${this.baseUrl}/media/upload`;
     const token = localStorage.getItem('auth_token');
-    
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -240,6 +252,110 @@ class ApiClient {
     return this.request<{ status: string; timestamp: string; uptime: number }>(
       '/health'
     );
+  }
+
+  // Storage endpoints
+  async getStorageProviders() {
+    return this.request<{ identifier: string; name: string }[]>('/storage/providers');
+  }
+
+  async getStorageAuthUrl(provider: string) {
+    return this.request<{ url: string; state: string }>(`/storage/auth/${provider}`);
+  }
+
+  async getStorageIntegrations() {
+    return this.request<StorageIntegration[]>('/storage/integrations');
+  }
+
+  async deleteStorageIntegration(id: string) {
+    return this.request(`/storage/integrations/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listStorageFiles(integrationId: string, folderId?: string, pageToken?: string) {
+    const params = new URLSearchParams();
+    if (folderId) params.append('folderId', folderId);
+    if (pageToken) params.append('pageToken', pageToken);
+
+    const query = params.toString();
+    console.log(`🔍 API call to list storage files - Integration: ${integrationId}, Folder: ${folderId || 'root'}, Query: ${query}`);
+
+    const result = this.request<{ files: StorageFile[]; nextPageToken?: string }>(
+      `/storage/${integrationId}/files${query ? `?${query}` : ''}`
+    );
+
+    result.then(response => {
+      console.log(`✅ API response - Files: ${response.files.length}, NextPageToken: ${response.nextPageToken}`);
+    }).catch(error => {
+      console.error(`❌ API error:`, error);
+    });
+
+    return result;
+  }
+
+  async getStorageDownloadUrl(integrationId: string, fileId: string) {
+    return this.request<{ url: string }>(`/storage/${integrationId}/download/${fileId}`);
+  }
+
+  async importStorageFile(integrationId: string, fileId: string) {
+    return this.request<{ path: string; filename: string; mimeType: string }>(
+      `/storage/${integrationId}/import/${fileId}`,
+      {
+        method: 'POST',
+      }
+    );
+  }
+
+  async searchStorageFiles(integrationId: string, query: string, options?: { mimeType?: string; pageSize?: number; pageToken?: string }) {
+    return this.request<{ files: StorageFile[]; nextPageToken?: string }>(
+      `/storage/${integrationId}/search`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ query, ...options }),
+      }
+    );
+  }
+
+  async getStorageThumbnail(integrationId: string, fileId: string, size?: number) {
+    const params = new URLSearchParams();
+    if (size) params.append('size', size.toString());
+    const query = params.toString();
+    return this.request<{ url: string }>(`/storage/${integrationId}/thumbnail/${fileId}${query ? `?${query}` : ''}`);
+  }
+
+  async batchImportStorageFiles(integrationId: string, fileIds: string[]) {
+    return this.request<{ results: Array<{ fileId: string; success: boolean; result?: any; error?: string }> }>(
+      `/storage/${integrationId}/batch-import`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ fileIds }),
+      }
+    );
+  }
+
+  async listSharedDrives(integrationId: string) {
+    return this.request<{ drives: Array<{ id: string; name: string }> }>(`/storage/${integrationId}/shared-drives`);
+  }
+
+  async exportStorageFile(integrationId: string, fileId: string, format?: string) {
+    // This endpoint returns a file stream, so we handle it differently if we want to trigger a download
+    // For now, we'll just return the response blob
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(`${this.baseUrl}/storage/${integrationId}/export/${fileId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ format }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to export file: ${response.statusText}`);
+    }
+
+    return response.blob();
   }
 }
 
@@ -347,6 +463,38 @@ export interface AggregatedAnalyticsResponse {
     from: string;
     to: string;
   };
+}
+
+// Storage types
+export interface StorageIntegration {
+  id: string;
+  provider: string;
+  providerName: string;
+  accountName: string;
+  accountEmail: string;
+  picture?: string;
+  quota?: {
+    used: number;
+    total: number;
+    usedFormatted: string;
+    totalFormatted: string;
+    percentUsed: number;
+  };
+  connected: boolean;
+  refreshNeeded: boolean;
+}
+
+export interface StorageFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  sizeFormatted: string;
+  modifiedTime: string;
+  thumbnailUrl?: string;
+  isFolder: boolean;
+  path: string;
+  canSelect: boolean;
 }
 
 // Export singleton instance

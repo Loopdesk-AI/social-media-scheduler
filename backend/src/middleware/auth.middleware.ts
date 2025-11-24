@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { UnauthorizedError } from '../utils/errors';
 import { authService } from '../services/auth.service';
+import { redisService } from '../services/redis.service';
 
 // Extend Express Request type
 declare global {
@@ -37,8 +38,20 @@ export async function authMiddleware(
     // Verify token
     const { userId } = authService.verifyToken(token);
 
-    // Get user from database
-    const user = await authService.getUserById(userId);
+    // Try to get user from Redis cache first
+    const cacheKey = `user:${userId}`;
+    const cachedUser = await redisService.get(cacheKey);
+
+    let user;
+    if (cachedUser) {
+      user = JSON.parse(cachedUser);
+    } else {
+      // Get user from database
+      user = await authService.getUserById(userId);
+
+      // Cache user data in Redis for 5 minutes
+      await redisService.setex(cacheKey, 300, JSON.stringify(user));
+    }
 
     // Attach user to request
     req.user = {

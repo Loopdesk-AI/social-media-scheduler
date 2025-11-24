@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { TrendingUp, Users, Eye, Heart, MessageCircle, Share2, Calendar } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { api, AnalyticsResponse } from '../lib/api';
@@ -11,14 +11,17 @@ export function AnalyticsView() {
   const [loading, setLoading] = useState(false);
   const [period, setPeriod] = useState(30);
 
-  // Auto-select first integration
-  useEffect(() => {
-    if (integrations.length > 0 && !selectedIntegration) {
-      setSelectedIntegration(integrations[0].id);
-    }
-  }, [integrations]);
+  const socialIntegrations = integrations.filter(integration =>
+    integration.providerIdentifier !== 'google-drive' &&
+    integration.providerIdentifier !== 'dropbox'
+  );
 
-  // Fetch analytics when integration or period changes
+  useEffect(() => {
+    if (socialIntegrations.length > 0 && !selectedIntegration) {
+      setSelectedIntegration(socialIntegrations[0].id);
+    }
+  }, [socialIntegrations]);
+
   useEffect(() => {
     if (selectedIntegration) {
       fetchAnalytics();
@@ -65,21 +68,21 @@ export function AnalyticsView() {
   if (integrationsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-gray-300 dark:border-white/20 border-t-blue-600 dark:border-t-white rounded-full animate-spin"></div>
       </div>
     );
   }
 
-  if (integrations.length === 0) {
+  if (socialIntegrations.length === 0) {
     return (
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-white text-3xl font-semibold mb-8">Analytics</h1>
-        <div className="bg-[#0a0a0a] rounded-xl border border-gray-800/50 p-12 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-800/30 flex items-center justify-center">
-            <TrendingUp className="text-gray-600" size={32} />
+        <h1 className="text-gray-900 dark:text-white text-3xl font-semibold mb-8">Analytics</h1>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-12 text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800/30 flex items-center justify-center">
+            <TrendingUp className="text-gray-400 dark:text-gray-600" size={32} />
           </div>
-          <h3 className="text-white text-lg font-medium mb-2">No Connected Accounts</h3>
-          <p className="text-gray-400 text-sm">
+          <h3 className="text-gray-900 dark:text-white text-lg font-medium mb-2">No Connected Accounts</h3>
+          <p className="text-gray-600 dark:text-gray-400 text-sm">
             Connect a social media account to view analytics
           </p>
         </div>
@@ -90,19 +93,17 @@ export function AnalyticsView() {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-white text-3xl font-semibold">Analytics</h1>
+        <h1 className="text-gray-900 dark:text-white text-3xl font-semibold">Analytics</h1>
         <div className="flex gap-3">
-          {/* Period selector */}
-          <div className="flex gap-2 bg-[#1a1a1a] rounded-lg p-1 border border-gray-800/50">
+          <div className="flex gap-2 bg-gray-100 dark:bg-gray-900 rounded-lg p-1 border border-gray-200 dark:border-gray-800/50">
             {[7, 30, 90].map((days) => (
               <button
                 key={days}
                 onClick={() => setPeriod(days)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  period === days
-                    ? 'bg-white text-black'
-                    : 'text-gray-400 hover:text-white'
-                }`}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${period === days
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
               >
                 {days}d
               </button>
@@ -113,15 +114,14 @@ export function AnalyticsView() {
 
       {/* Integration selector */}
       <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
-        {integrations.map((integration) => (
+        {socialIntegrations.map((integration) => (
           <button
             key={integration.id}
             onClick={() => setSelectedIntegration(integration.id)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all flex-shrink-0 ${
-              selectedIntegration === integration.id
-                ? 'bg-white text-black border-white'
-                : 'bg-[#1a1a1a] text-white border-gray-800/50 hover:border-gray-700'
-            }`}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all flex-shrink-0 ${selectedIntegration === integration.id
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white border-gray-200 dark:border-gray-800/50 hover:border-gray-300 dark:hover:border-gray-700'
+              }`}
           >
             <img
               src={integration.picture}
@@ -130,9 +130,8 @@ export function AnalyticsView() {
             />
             <div className="text-left">
               <div className="font-medium text-sm">{integration.name}</div>
-              <div className={`text-xs capitalize ${
-                selectedIntegration === integration.id ? 'text-gray-700' : 'text-gray-400'
-              }`}>
+              <div className={`text-xs capitalize ${selectedIntegration === integration.id ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
+                }`}>
                 {integration.providerIdentifier}
               </div>
             </div>
@@ -143,7 +142,7 @@ export function AnalyticsView() {
       {/* Analytics content */}
       {loading ? (
         <div className="flex items-center justify-center min-h-[400px]">
-          <div className="w-8 h-8 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
+          <div className="w-8 h-8 border-4 border-gray-300 dark:border-white/20 border-t-blue-600 dark:border-t-white rounded-full animate-spin"></div>
         </div>
       ) : analytics ? (
         <div className="space-y-6">
@@ -158,25 +157,24 @@ export function AnalyticsView() {
               return (
                 <div
                   key={index}
-                  className="bg-[#0a0a0a] rounded-xl border border-gray-800/50 p-6 hover:border-gray-700 transition-colors"
+                  className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-6 hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-[#1a1a1a] flex items-center justify-center">
-                      <Icon className="text-white" size={20} />
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                      <Icon className="text-gray-900 dark:text-white" size={20} />
                     </div>
                     {change !== 0 && (
-                      <div className={`flex items-center gap-1 text-xs font-medium ${
-                        isPositive ? 'text-green-500' : 'text-red-500'
-                      }`}>
+                      <div className={`flex items-center gap-1 text-xs font-medium ${isPositive ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'
+                        }`}>
                         <TrendingUp size={14} className={!isPositive ? 'rotate-180' : ''} />
                         {Math.abs(change).toFixed(1)}%
                       </div>
                     )}
                   </div>
-                  <div className="text-3xl font-bold text-white mb-1">
+                  <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
                     {total.toLocaleString()}
                   </div>
-                  <div className="text-sm text-gray-400">{metric.label}</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">{metric.label}</div>
                 </div>
               );
             })}
@@ -187,22 +185,22 @@ export function AnalyticsView() {
             {analytics.analytics.map((metric, index) => (
               <div
                 key={index}
-                className="bg-[#0a0a0a] rounded-xl border border-gray-800/50 p-6"
+                className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-6"
               >
-                <h3 className="text-white font-medium mb-4">{metric.label} Over Time</h3>
+                <h3 className="text-gray-900 dark:text-white font-medium mb-4">{metric.label} Over Time</h3>
                 <div className="h-48 flex items-end gap-1">
                   {metric.data.slice(-period).map((point, i) => {
                     const maxValue = Math.max(...metric.data.map(d => d.total));
                     const height = maxValue > 0 ? (point.total / maxValue) * 100 : 0;
-                    
+
                     return (
                       <div
                         key={i}
-                        className="flex-1 bg-white/10 hover:bg-white/20 rounded-t transition-all cursor-pointer group relative"
+                        className="flex-1 bg-blue-200 dark:bg-white/10 hover:bg-blue-300 dark:hover:bg-white/20 rounded-t transition-all cursor-pointer group relative"
                         style={{ height: `${height}%`, minHeight: '4px' }}
                         title={`${new Date(point.date).toLocaleDateString()}: ${point.total}`}
                       >
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 dark:bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
                           {point.total.toLocaleString()}
                           <div className="text-gray-400 text-[10px]">
                             {new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -212,7 +210,7 @@ export function AnalyticsView() {
                     );
                   })}
                 </div>
-                <div className="flex justify-between mt-4 text-xs text-gray-500">
+                <div className="flex justify-between mt-4 text-xs text-gray-500 dark:text-gray-500">
                   <span>{new Date(analytics.period.from).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                   <span>{new Date(analytics.period.to).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                 </div>
@@ -221,28 +219,45 @@ export function AnalyticsView() {
           </div>
 
           {/* Period info */}
-          <div className="bg-[#0a0a0a] rounded-xl border border-gray-800/50 p-4 flex items-center gap-3">
-            <Calendar className="text-gray-400" size={20} />
-            <div className="text-sm text-gray-400">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-4 flex items-center gap-3">
+            <Calendar className="text-gray-600 dark:text-gray-400" size={20} />
+            <div className="text-sm text-gray-600 dark:text-gray-400">
               Showing data from{' '}
-              <span className="text-white font-medium">
+              <span className="text-gray-900 dark:text-white font-medium">
                 {new Date(analytics.period.from).toLocaleDateString()}
               </span>
               {' '}to{' '}
-              <span className="text-white font-medium">
+              <span className="text-gray-900 dark:text-white font-medium">
                 {new Date(analytics.period.to).toLocaleDateString()}
               </span>
             </div>
           </div>
         </div>
       ) : (
-        <div className="bg-[#0a0a0a] rounded-xl border border-gray-800/50 p-12 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-800/30 flex items-center justify-center">
-            <TrendingUp className="text-gray-600" size={32} />
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-12 text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800/30 flex items-center justify-center">
+            <TrendingUp className="text-gray-400 dark:text-gray-600" size={32} />
           </div>
-          <h3 className="text-white text-lg font-medium mb-2">No Analytics Available</h3>
-          <p className="text-gray-400 text-sm">
-            Analytics data will appear here once available
+          <h3 className="text-gray-900 dark:text-white text-lg font-medium mb-2">No Analytics Available</h3>
+          <p className="text-gray-600 dark:text-gray-400 text-sm max-w-md mx-auto">
+            {selectedIntegration && socialIntegrations.find(i => i.id === selectedIntegration)?.providerIdentifier === 'linkedin' ? (
+              <>
+                LinkedIn does not provide analytics for personal profiles through their API.
+                Analytics are only available for company pages.
+                <br /><br />
+                To view your personal profile analytics, please visit{' '}
+                <a
+                  href="https://www.linkedin.com/analytics/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  LinkedIn Analytics
+                </a>
+              </>
+            ) : (
+              'Analytics data will appear here once available'
+            )}
           </p>
         </div>
       )}

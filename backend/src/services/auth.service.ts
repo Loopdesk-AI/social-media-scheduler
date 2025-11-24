@@ -8,7 +8,7 @@ import { ValidationError, UnauthorizedError } from '../utils/errors';
  * Handles user registration, login, and JWT token management
  */
 class AuthService {
-  private readonly JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+  private readonly JWT_SECRET = process.env.JWT_SECRET!;
   private readonly JWT_EXPIRES_IN = '7d'; // Token expires in 7 days
   private readonly SALT_ROUNDS = 10;
 
@@ -16,8 +16,11 @@ class AuthService {
    * Register a new user
    */
   async register(email: string, password: string, name?: string) {
+    // Sanitize input
+    const cleanEmail = email.trim().toLowerCase();
+
     // Validate email format
-    if (!this.isValidEmail(email)) {
+    if (!this.isValidEmail(cleanEmail)) {
       throw new ValidationError('Invalid email format');
     }
 
@@ -30,7 +33,7 @@ class AuthService {
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: cleanEmail },
     });
 
     if (existingUser) {
@@ -43,9 +46,9 @@ class AuthService {
     // Create user
     const user = await prisma.user.create({
       data: {
-        email: email.toLowerCase(),
+        email: cleanEmail,
         password: hashedPassword,
-        name: name || email.split('@')[0],
+        name: name || cleanEmail.split('@')[0],
         timezone: 0,
       },
     });
@@ -70,9 +73,11 @@ class AuthService {
    * Login user
    */
   async login(email: string, password: string) {
+    const cleanEmail = email.trim().toLowerCase();
+
     // Find user
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: cleanEmail },
     });
 
     if (!user || !user.password) {

@@ -19,6 +19,8 @@ model User {
   integrations      Integration[]
   posts             Post[]
   media             Media[]
+  conversations     Conversation[]
+  geminiApiKey      String?             // Stored securely (consider encryption in production)
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
@@ -40,7 +42,15 @@ model Integration {
   disabled           Boolean      @default(false)
   refreshNeeded      Boolean      @default(false)
   profile            String?      // Additional profile data (JSON)
+  
+  // New fields for enhanced functionality
+  settings           Json?        // Platform-specific settings (default hashtags, etc.)
+  healthStatus       String       @default("healthy") // "healthy", "warning", "error"
+  lastHealthCheck    DateTime?    // Last health check timestamp
+  metadata           Json?        // Additional platform metadata (page type, org role, etc.)
+  
   posts              Post[]
+  analytics          Analytics[]
   deletedAt          DateTime?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -49,6 +59,8 @@ model Integration {
   @@index([userId])
   @@index([providerIdentifier])
   @@index([refreshNeeded])
+  @@index([healthStatus])
+  @@index([lastHealthCheck])
   @@index([deletedAt])
 }
 
@@ -62,11 +74,19 @@ model Post {
   integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
   content        String       @db.Text // Post caption/description
   group          String       // UUID for multi-platform posts
-  settings       String?      @db.Text // Platform-specific settings (JSON)
+  settings       Json?        // Platform-specific settings (JSON)
   releaseId      String?      // Platform post ID
   releaseURL     String?      // Published post URL
   error          String?      @db.Text // Error message if failed
   jobId          String?      // BullMQ job ID
+  
+  // New fields for enhanced tracking
+  postType       String       @default("standard") // "standard", "story", "carousel", "thread"
+  mediaMetadata  Json?        // Media-specific metadata (alt text, thumbnails, etc.)
+  scheduledBy    String?      // "user" or "ai-optimization"
+  retryCount     Int          @default(0) // Number of retry attempts
+  lastRetryAt    DateTime?    // Last retry timestamp
+  
   deletedAt      DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -76,6 +96,8 @@ model Post {
   @@index([state])
   @@index([publishDate])
   @@index([group])
+  @@index([postType])
+  @@index([retryCount])
   @@index([deletedAt])
 }
 
@@ -96,6 +118,50 @@ model Media {
   @@index([userId])
   @@index([type])
   @@index([deletedAt])
+}
+
+model Analytics {
+  id               String       @id @default(cuid())
+  integrationId    String
+  integration      Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  date             DateTime
+  platform         String       // "facebook", "linkedin", "twitter", "instagram", "youtube"
+  metrics          Json         // Platform-specific metrics
+  createdAt        DateTime     @default(now())
+  
+  @@unique([integrationId, date, platform])
+  @@index([date])
+  @@index([platform])
+  @@index([integrationId])
+}
+
+model Conversation {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String        // Auto-generated from first message
+  platform    String?       // 'linkedin', 'twitter', 'instagram', 'youtube', 'tiktok', 'custom'
+  template    String?       // Template type used
+  messages    ChatMessage[]
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId, deletedAt])
+  @@index([createdAt])
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // 'user' or 'assistant'
+  content        String       @db.Text
+  metadata       Json?        // Platform-specific data
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
 }
 
 enum State {

@@ -28,6 +28,15 @@ export class MetricsService {
   public postsPublished: Counter;
   public postsFailed: Counter;
 
+  // Social Media metrics
+  public socialPostsTotal: Counter;
+  public socialApiRequestsTotal: Counter;
+  public socialApiErrorsTotal: Counter;
+  public socialRateLimitHitsTotal: Counter;
+  public socialPostPublishDuration: Histogram;
+  public socialOAuthFlowDuration: Histogram;
+  public socialMediaUploadDuration: Histogram;
+
   constructor() {
     this.registry = new Registry();
 
@@ -127,6 +136,59 @@ export class MetricsService {
       help: 'Total number of posts failed',
       labelNames: ['provider', 'error_type'],
       registers: [this.registry],
+    });
+
+    // Social Media Platform Metrics
+    this.socialPostsTotal = new Counter({
+      name: 'social_posts_total',
+      help: 'Total number of social media posts',
+      labelNames: ['platform', 'status'], // status: success, failed, pending
+      registers: [this.registry],
+    });
+
+    this.socialApiRequestsTotal = new Counter({
+      name: 'social_api_requests_total',
+      help: 'Total number of social media API requests',
+      labelNames: ['platform', 'endpoint'],
+      registers: [this.registry],
+    });
+
+    this.socialApiErrorsTotal = new Counter({
+      name: 'social_api_errors_total',
+      help: 'Total number of social media API errors',
+      labelNames: ['platform', 'error_type'],
+      registers: [this.registry],
+    });
+
+    this.socialRateLimitHitsTotal = new Counter({
+      name: 'social_rate_limit_hits_total',
+      help: 'Total number of rate limit hits',
+      labelNames: ['platform'],
+      registers: [this.registry],
+    });
+
+    this.socialPostPublishDuration = new Histogram({
+      name: 'social_post_publish_duration_seconds',
+      help: 'Duration of social media post publishing in seconds',
+      labelNames: ['platform'],
+      registers: [this.registry],
+      buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60], // seconds
+    });
+
+    this.socialOAuthFlowDuration = new Histogram({
+      name: 'social_oauth_flow_duration_seconds',
+      help: 'Duration of OAuth authentication flow in seconds',
+      labelNames: ['platform'],
+      registers: [this.registry],
+      buckets: [0.5, 1, 2, 5, 10, 20], // seconds
+    });
+
+    this.socialMediaUploadDuration = new Histogram({
+      name: 'social_media_upload_duration_seconds',
+      help: 'Duration of media upload to social platforms in seconds',
+      labelNames: ['platform', 'media_type'],
+      registers: [this.registry],
+      buckets: [1, 5, 10, 30, 60, 120, 300], // seconds
     });
 
     console.log('✅ Prometheus metrics initialized');

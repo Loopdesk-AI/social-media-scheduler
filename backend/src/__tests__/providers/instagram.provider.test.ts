@@ -1,6 +1,6 @@
 // Instagram Provider Tests
 
-import { InstagramProvider } from '../../providers/social/instagram/instagram.provider';
+import { InstagramProvider } from '../../providers/social/instagram.provider';
 
 describe('InstagramProvider', () => {
   let provider: InstagramProvider;
@@ -35,7 +35,7 @@ describe('InstagramProvider', () => {
   describe('generateAuthUrl', () => {
     it('should generate valid auth URL', async () => {
       const result = await provider.generateAuthUrl();
-      
+
       expect(result).toHaveProperty('url');
       expect(result).toHaveProperty('codeVerifier');
       expect(result).toHaveProperty('state');
@@ -49,9 +49,9 @@ describe('InstagramProvider', () => {
       const errorBody = JSON.stringify({
         error: { message: '2207042' }
       });
-      
+
       const result = provider.handleErrors(errorBody);
-      
+
       expect(result).toBeDefined();
       expect(result?.type).toBe('bad-body');
       expect(result?.value).toContain('25 posts per day');
@@ -61,9 +61,9 @@ describe('InstagramProvider', () => {
       const errorBody = JSON.stringify({
         error: { message: 'REVOKED_ACCESS_TOKEN' }
       });
-      
+
       const result = provider.handleErrors(errorBody);
-      
+
       expect(result).toBeDefined();
       expect(result?.type).toBe('refresh-token');
     });
@@ -72,9 +72,9 @@ describe('InstagramProvider', () => {
       const errorBody = JSON.stringify({
         error: { message: 'Unknown error' }
       });
-      
+
       const result = provider.handleErrors(errorBody);
-      
+
       expect(result).toBeUndefined();
     });
   });

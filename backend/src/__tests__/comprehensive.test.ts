@@ -1,25 +1,26 @@
 // Comprehensive Test Suite for All Providers and Services
 
-import { InstagramProvider } from '../providers/social/instagram/instagram.provider';
+import { InstagramProvider } from '../providers/social/instagram.provider';
 import { YoutubeProvider } from '../providers/social/youtube/youtube.provider';
-import { TikTokProvider } from '../providers/social/tiktok/tiktok.provider';
+
 import { LinkedInProvider } from '../providers/social/linkedin/linkedin.provider';
 import { FacebookProvider } from '../providers/social/facebook/facebook.provider';
 import { TwitterProvider } from '../providers/social/twitter/twitter.provider';
 import { integrationManager } from '../providers/integration.manager';
+import { QueueService } from '../services/queue.service';
 import { encrypt, decrypt } from '../services/encryption.service';
 
 describe('Comprehensive Test Suite', () => {
-  
+
   // ============================================
   // PROVIDER TESTS
   // ============================================
-  
+
   describe('All Providers Configuration', () => {
     const providers = [
       { Provider: InstagramProvider, identifier: 'instagram', maxLength: 2200 },
       { Provider: YoutubeProvider, identifier: 'youtube', maxLength: 5000 },
-      { Provider: TikTokProvider, identifier: 'tiktok', maxLength: 2200 },
+
       { Provider: LinkedInProvider, identifier: 'linkedin', maxLength: 3000 },
       { Provider: FacebookProvider, identifier: 'facebook', maxLength: 63206 },
       { Provider: TwitterProvider, identifier: 'twitter', maxLength: 280 },
@@ -64,7 +65,7 @@ describe('Comprehensive Test Suite', () => {
   // ============================================
   // INTEGRATION MANAGER TESTS
   // ============================================
-  
+
   describe('Integration Manager', () => {
     it('should return all integrations', async () => {
       const integrations = await integrationManager.getAllIntegrations();
@@ -85,11 +86,7 @@ describe('Comprehensive Test Suite', () => {
       expect(provider.identifier).toBe('youtube');
     });
 
-    it('should get TikTok provider', () => {
-      const provider = integrationManager.getSocialIntegration('tiktok');
-      expect(provider).toBeDefined();
-      expect(provider.identifier).toBe('tiktok');
-    });
+
 
     it('should get LinkedIn provider', () => {
       const provider = integrationManager.getSocialIntegration('linkedin');
@@ -119,13 +116,13 @@ describe('Comprehensive Test Suite', () => {
   // ============================================
   // ENCRYPTION SERVICE TESTS
   // ============================================
-  
+
   describe('Encryption Service', () => {
     it('should encrypt and decrypt text', () => {
       const originalText = 'test_access_token_12345';
       const encrypted = encrypt(originalText);
       const decrypted = decrypt(encrypted);
-      
+
       expect(encrypted).not.toBe(originalText);
       expect(decrypted).toBe(originalText);
     });
@@ -134,7 +131,7 @@ describe('Comprehensive Test Suite', () => {
       const text = 'test_token';
       const encrypted1 = encrypt(text);
       const encrypted2 = encrypt(text);
-      
+
       expect(encrypted1).not.toBe(encrypted2);
       expect(decrypt(encrypted1)).toBe(text);
       expect(decrypt(encrypted2)).toBe(text);
@@ -144,7 +141,7 @@ describe('Comprehensive Test Suite', () => {
       const longText = 'a'.repeat(1000);
       const encrypted = encrypt(longText);
       const decrypted = decrypt(encrypted);
-      
+
       expect(decrypted).toBe(longText);
     });
   });
@@ -152,13 +149,13 @@ describe('Comprehensive Test Suite', () => {
   // ============================================
   // ERROR HANDLING TESTS
   // ============================================
-  
+
   describe('Provider Error Handling', () => {
     it('Instagram should handle rate limit errors', () => {
       const provider = new InstagramProvider();
       const errorBody = JSON.stringify({ error: { message: '2207042' } });
       const result = provider.handleErrors(errorBody);
-      
+
       expect(result).toBeDefined();
       expect(result?.type).toBe('bad-body');
     });
@@ -169,27 +166,18 @@ describe('Comprehensive Test Suite', () => {
         error: { errors: [{ reason: 'uploadLimitExceeded' }] }
       });
       const result = provider.handleErrors(errorBody);
-      
+
       expect(result).toBeDefined();
       expect(result?.type).toBe('bad-body');
     });
 
-    it('TikTok should handle rate limit errors', () => {
-      const provider = new TikTokProvider();
-      const errorBody = JSON.stringify({
-        error: { code: 'rate_limit_exceeded' }
-      });
-      const result = provider.handleErrors(errorBody);
-      
-      expect(result).toBeDefined();
-      expect(result?.type).toBe('retry');
-    });
+
 
     it('LinkedIn should handle unauthorized errors', () => {
       const provider = new LinkedInProvider();
       const errorBody = JSON.stringify({ message: 'unauthorized' });
       const result = provider.handleErrors(errorBody, 401);
-      
+
       expect(result).toBeDefined();
       expect(result?.type).toBe('refresh-token');
     });
@@ -200,7 +188,7 @@ describe('Comprehensive Test Suite', () => {
         error: { code: 368, message: 'duplicate' }
       });
       const result = provider.handleErrors(errorBody);
-      
+
       expect(result).toBeDefined();
       expect(result?.type).toBe('bad-body');
     });
@@ -211,7 +199,7 @@ describe('Comprehensive Test Suite', () => {
         errors: [{ message: 'duplicate content' }]
       });
       const result = provider.handleErrors(errorBody);
-      
+
       expect(result).toBeDefined();
       expect(result?.type).toBe('bad-body');
     });

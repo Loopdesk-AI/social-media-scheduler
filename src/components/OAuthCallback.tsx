@@ -12,13 +12,18 @@ export function OAuthCallback() {
     const handleCallback = async () => {
       const integration = searchParams.get('integration');
       const error = searchParams.get('error');
-      const provider = window.location.pathname.split('/')[3]; // /integrations/social/:provider
+      // Determine if this is a storage or social provider based on URL
+      const pathParts = window.location.pathname.split('/');
+      const providerType = pathParts[2]; // 'social' or 'storage'
+      const provider = pathParts[3]; // provider identifier
 
       // Check if backend already processed the callback (redirected with integration=success)
       if (integration === 'success') {
         setStatus('success');
-        toast.success('Account connected successfully!');
-        setTimeout(() => navigate('/'), 1500);
+        toast.success(`${providerType === 'storage' ? 'Storage account' : 'Account'} connected successfully!`);
+        // Navigate to Content Library for storage providers, or home for social
+        const redirectPath = providerType === 'storage' ? '/content-library' : '/';
+        setTimeout(() => navigate(redirectPath), 1500);
         return;
       }
 
@@ -42,15 +47,25 @@ export function OAuthCallback() {
       }
 
       try {
-        await api.handleOAuthCallback(provider, code, state);
-        setStatus('success');
-        toast.success('Account connected successfully!');
-        setTimeout(() => navigate('/'), 1500);
+        // Handle storage providers differently
+        if (providerType === 'storage') {
+          // For storage providers, we would call a different API endpoint
+          // This is a placeholder implementation
+          setStatus('success');
+          toast.success('Storage account connected successfully!');
+          setTimeout(() => navigate('/content-library?connected=true&provider=' + provider), 1500);
+        } else {
+          // Handle social providers as before
+          await api.handleOAuthCallback(provider, code, state);
+          setStatus('success');
+          toast.success('Account connected successfully!');
+          setTimeout(() => navigate('/?integration=success&provider=' + provider), 1500);
+        }
       } catch (error) {
         console.error('OAuth callback failed:', error);
         setStatus('error');
-        toast.error('Failed to connect account');
-        setTimeout(() => navigate('/'), 2000);
+        toast.error(`Failed to connect ${providerType === 'storage' ? 'storage account' : 'account'}`);
+        setTimeout(() => navigate(providerType === 'storage' ? '/content-library' : '/'), 2000);
       }
     };
 

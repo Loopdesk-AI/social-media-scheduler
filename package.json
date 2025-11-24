@@ -11,14 +11,21 @@
     "preview": "npx vite preview"
   },
   "dependencies": {
+    "@ai-sdk/react": "^2.0.97",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "ai": "^5.0.97",
     "clsx": "latest",
     "lucide-react": "^0.522.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.26.2",
+    "react-syntax-highlighter": "^16.1.0",
     "recharts": "^2.12.7",
+    "remark-gfm": "^4.0.1",
     "sonner": "^2.0.1",
-    "tailwind-merge": "latest"
+    "tailwind-merge": "latest",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/node": "^20.11.18",
@@ -34,6 +41,6 @@
     "postcss": "latest",
     "tailwindcss": "3.4.17",
     "typescript": "^5.5.4",
-    "vite": "^5.2.0"
+    "vite": "^7.2.4"
   }
 }

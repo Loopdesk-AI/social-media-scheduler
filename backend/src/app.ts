@@ -7,6 +7,9 @@ import { integrationsRoutes } from './routes/integrations.routes';
 import { postsRoutes } from './routes/posts.routes';
 import { mediaRoutes } from './routes/media.routes';
 import analyticsRoutes from './routes/analytics.routes';
+import storageRoutes from './routes/storage.routes';
+import { chatRoutes } from './routes/chat.routes';
+import { userRoutes } from './routes/user.routes';
 import { monitoringRoutes } from './routes/monitoring.routes';
 import { errorMiddleware } from './middleware/error.middleware';
 import { metricsMiddleware } from './middleware/metrics.middleware';
@@ -27,6 +30,7 @@ app.use(
   cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     credentials: true,
+    exposedHeaders: ['X-Conversation-Id']
   })
 );
 
@@ -64,6 +68,9 @@ app.use('/api/integrations', integrationsRoutes); // Auth handled per-route
 app.use('/api/posts', authMiddleware, postsRoutes);
 app.use('/api/media', authMiddleware, mediaRoutes);
 app.use('/api/analytics', authMiddleware, analyticsRoutes);
+app.use('/api/storage', storageRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/user', userRoutes);
 
 // 404 handler
 app.use((req, res) => {

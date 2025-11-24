@@ -61,6 +61,11 @@ export class PostService {
     }
 
     // Get provider to validate content
+    // Check if this is a storage integration - validation is only for social integrations
+    if (integration.type === 'storage') {
+      throw new ValidationError('Content validation is only available for social media accounts, not storage accounts');
+    }
+
     const provider = integrationManager.getSocialIntegration(
       integration.providerIdentifier
     );
@@ -80,11 +85,20 @@ export class PostService {
     // Generate group ID for multi-platform posts
     const group = uuidv4();
 
+    // DEBUG: Log what we received
+    console.log(`🔍 DEBUG createPost - Received data:`, {
+      media: data.media,
+      settings: data.settings,
+      integrationId: data.integrationId
+    });
+
     // Prepare settings with media
     const settings = {
       ...(data.settings || {}),
       media: data.media || [],
     };
+
+    console.log(`📦 DEBUG merged settings:`, settings);
 
     // Create post
     const post = await prisma.post.create({
@@ -94,7 +108,7 @@ export class PostService {
         content: data.content,
         publishDate: data.publishDate,
         group,
-        settings: JSON.stringify(settings),
+        settings: settings,
         state: 'QUEUE',
       },
       include: {
@@ -197,7 +211,7 @@ export class PostService {
           integrationId: integration.id,
           content: postContent,
           publishDate: data.publishDate,
-          settings: postSettings ? JSON.stringify(postSettings) : null,
+          settings: postSettings || null,
           state: 'QUEUE',
           group: groupId,
         },
@@ -335,6 +349,11 @@ export class PostService {
 
     // Validate content length if provided
     if (data.content) {
+      // Check if this is a storage integration - validation is only for social integrations
+      if (post.integration.type === 'storage') {
+        throw new ValidationError('Content validation is only available for social media accounts, not storage accounts');
+      }
+
       const provider = integrationManager.getSocialIntegration(
         post.integration.providerIdentifier
       );
@@ -350,7 +369,7 @@ export class PostService {
       where: { id },
       data: {
         ...(data.content && { content: data.content }),
-        ...(data.settings && { settings: JSON.stringify(data.settings) }),
+        ...(data.settings && { settings: data.settings }),
       },
     });
 
@@ -516,7 +535,7 @@ export class PostService {
         data: {
           content: updates.content || post.content,
           publishDate: updates.publishDate || post.publishDate,
-          settings: updates.settings ? JSON.stringify(updates.settings) : post.settings,
+          settings: updates.settings || post.settings,
         },
       });
 

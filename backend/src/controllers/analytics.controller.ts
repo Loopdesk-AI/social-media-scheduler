@@ -2,10 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import { integrationManager } from '../providers/integration.manager';
 import { prisma } from '../database/prisma.client';
 import { decrypt, encrypt } from '../services/encryption.service';
+import { redisService } from '../services/redis.service';
 
-// Simple in-memory cache for analytics (1 hour TTL)
-const analyticsCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+// Redis-based cache for analytics (1 hour TTL)
+const CACHE_TTL = 60 * 60; // 1 hour in seconds
 
 export class AnalyticsController {
   async getAnalytics(req: Request, res: Response, next: NextFunction) {
@@ -16,12 +16,12 @@ export class AnalyticsController {
       const days = req.query.days ? parseInt(req.query.days as string) : 30;
       const date = Date.now() - days * 24 * 60 * 60 * 1000;
 
-      // Check cache
-      const cacheKey = `${integrationId}-${date}`;
-      const cached = analyticsCache.get(cacheKey);
-      
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return res.json(cached.data);
+      // Check Redis cache
+      const cacheKey = `analytics:${integrationId}:${date}`;
+      const cached = await redisService.get(cacheKey);
+
+      if (cached) {
+        return res.json(JSON.parse(cached));
       }
 
       // Get integration
@@ -35,6 +35,14 @@ export class AnalyticsController {
 
       if (!integration) {
         return res.status(404).json({ error: 'Integration not found' });
+      }
+
+      // Check if this is a storage integration - analytics are only for social integrations
+      if (integration.type === 'storage') {
+        return res.status(400).json({
+          error: 'Analytics not available',
+          message: 'Analytics are only available for social media accounts, not storage accounts'
+        });
       }
 
       // Get provider
@@ -62,7 +70,7 @@ export class AnalyticsController {
             const refreshToken = integration.refreshToken;
             if (refreshToken) {
               const newTokens = await provider.refreshToken(refreshToken);
-              
+
               // Update integration with new tokens
               await prisma.integration.update({
                 where: { id: integrationId },
@@ -73,7 +81,7 @@ export class AnalyticsController {
                   refreshNeeded: false,
                 },
               });
-              
+
               // Retry the analytics call with the new token
               accessToken = newTokens.accessToken;
               analytics = await provider.analytics(
@@ -112,16 +120,13 @@ export class AnalyticsController {
         },
       };
 
-      // Cache the response
-      analyticsCache.set(cacheKey, {
-        data: response,
-        timestamp: Date.now(),
-      });
+      // Cache the response in Redis
+      await redisService.setex(cacheKey, CACHE_TTL, JSON.stringify(response));
 
       res.json(response);
     } catch (error) {
       console.error('Analytics error:', error);
-      
+
       // Handle specific error cases
       if (error instanceof Error) {
         // Check if it's a token refresh error
@@ -136,22 +141,23 @@ export class AnalyticsController {
           } catch (updateError) {
             console.error('Failed to mark integration for refresh:', updateError);
           }
-          
-          return res.status(401).json({ 
-            error: 'Token refresh required', 
+
+          return res.status(401).json({
+            error: 'Token refresh required',
             message: 'Please re-authenticate your account',
             refreshNeeded: true
           });
         }
       }
-      
+
       next(error);
     }
   }
 
   async clearCache(req: Request, res: Response, next: NextFunction) {
     try {
-      analyticsCache.clear();
+      // Clear all analytics cache keys in Redis
+      await redisService.deletePattern('analytics:*');
       res.json({ success: true, message: 'Analytics cache cleared' });
     } catch (error) {
       next(error);

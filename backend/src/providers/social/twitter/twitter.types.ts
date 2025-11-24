@@ -90,3 +90,23 @@ export interface TwitterPollOptions {
   options: string[];
   duration_minutes: number;
 }
+
+export interface TwitterThreadSettings {
+  tweets: Array<{
+    text: string;
+    mediaIds?: string[];
+  }>;
+  reply_settings?: 'everyone' | 'mentionedUsers' | 'following';
+}
+
+export interface TwitterQuoteTweetSettings {
+  text: string;
+  quotedTweetId: string;
+  mediaIds?: string[];
+}
+
+export interface TwitterMediaAltText {
+  mediaId: string;
+  altText: string;
+}
+

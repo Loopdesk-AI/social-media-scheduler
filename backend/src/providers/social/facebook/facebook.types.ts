@@ -115,3 +115,26 @@ export interface FacebookMediaUploadSession {
   start_offset: number;
   end_offset: number;
 }
+
+export interface FacebookStorySettings {
+  mediaUrl: string;
+  mediaType: 'photo' | 'video';
+}
+
+export interface FacebookCarouselCard {
+  imageUrl: string;
+  link: string;
+  title: string;
+  description?: string;
+}
+
+export interface FacebookCarouselSettings {
+  message: string;
+  cards: FacebookCarouselCard[]; // 2-10 cards
+}
+
+export interface FacebookReelSettings {
+  videoUrl: string;
+  description: string;
+}
+

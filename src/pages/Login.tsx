@@ -23,7 +23,7 @@ export function Login() {
         throw new Error('No token received from server');
       }
 
-      console.log('Login successful, token:', token.substring(0, 20) + '...');
+      // console.log('Login successful, token:', token.substring(0, 20) + '...');
 
       // Save token to localStorage
       localStorage.setItem('auth_token', token);
@@ -35,7 +35,7 @@ export function Login() {
       toast.success('Welcome back!');
       navigate('/');
     } catch (error: any) {
-      console.error('Login error:', error);
+      // console.error('Login error:', error);
       const message = error.message || 'Login failed';
       toast.error(message);
     } finally {

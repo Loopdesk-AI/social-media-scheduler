@@ -50,7 +50,7 @@ export function Register() {
         throw new Error('No token received from server');
       }
 
-      console.log('Registration successful, token:', token.substring(0, 20) + '...');
+      // console.log('Registration successful, token:', token.substring(0, 20) + '...');
 
       // Save token to localStorage
       localStorage.setItem('auth_token', token);
@@ -62,7 +62,7 @@ export function Register() {
       toast.success('Account created successfully!');
       navigate('/');
     } catch (error: any) {
-      console.error('Registration error:', error);
+      // console.error('Registration error:', error);
       const message = error.message || 'Registration failed';
       toast.error(message);
     } finally {

@@ -8,13 +8,7 @@ export const platforms: Platform[] = [
     icon: 'https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg',
     isPro: true,
   },
-  {
-    id: 'tiktok',
-    name: 'TikTok',
-    description: 'Feed or Inbox',
-    icon: 'https://upload.wikimedia.org/wikipedia/en/a/a9/TikTok_logo.svg',
-    isPro: true,
-  },
+
   {
     id: 'linkedin',
     name: 'LinkedIn',

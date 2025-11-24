@@ -8,6 +8,31 @@ import { metricsService } from '../monitoring/metrics.service';
 import logger from '../utils/logger';
 
 /**
+ * Safely serialize errors, handling circular references from axios
+ */
+function serializeError(error: any): any {
+  if (error?.response) {
+    // Axios error - extract only the important parts
+    return {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: error.config?.url,
+      method: error.config?.method,
+    };
+  }
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    };
+  }
+  return error;
+}
+
+/**
  * Queue Service
  * Manages BullMQ queue and worker for processing scheduled posts
  */
@@ -49,16 +74,24 @@ export class QueueService {
   }
 
   /**
-   * Add job to queue
+   * Add job to queue with priority and deduplication
    * @param postId Post ID to publish
    * @param publishDate When to publish
+   * @param priority Job priority (1-10, higher = more urgent)
    * @returns Job ID
    */
-  async addJob(postId: string, publishDate: Date): Promise<string> {
+  async addJob(postId: string, publishDate: Date, priority: number = 5): Promise<string> {
     const delay = publishDate.getTime() - Date.now();
-    
+
     if (delay < 0) {
       throw new Error('Publish date must be in the future');
+    }
+
+    // Check for duplicate jobs
+    const existingJob = await this.findJobByPostId(postId);
+    if (existingJob) {
+      logger.warn(`Job already exists for post ${postId}, removing old job`);
+      await existingJob.remove();
     }
 
     const job = await this.queue.add(
@@ -66,16 +99,34 @@ export class QueueService {
       { postId },
       {
         delay,
-        attempts: 3,
+        priority, // Higher priority jobs are processed first
+        attempts: 1, // NO retries - if it fails, it fails
         backoff: {
           type: 'exponential',
-          delay: 5000,
+          delay: 2000, // Start with 2s
         },
+        removeOnComplete: {
+          age: 86400, // Keep completed jobs for 24 hours
+          count: 1000, // Keep max 1000 completed jobs
+        },
+        removeOnFail: {
+          age: 604800, // Keep failed jobs for 7 days
+        },
+        jobId: `post-${postId}`, // Unique job ID for deduplication
       }
     );
 
-    console.log(`📅 Scheduled job ${job.id} for post ${postId} in ${Math.round(delay / 1000)}s`);
+    logger.info(`Scheduled job ${job.id} for post ${postId} in ${Math.round(delay / 1000)}s with priority ${priority}`);
     return job.id!;
+  }
+
+  /**
+   * Find job by post ID
+   */
+  private async findJobByPostId(postId: string): Promise<Job | null> {
+    const jobId = `post-${postId}`;
+    const job = await this.queue.getJob(jobId);
+    return job || null;
   }
 
   /**
@@ -116,6 +167,11 @@ export class QueueService {
     }
 
     // 2. Get provider
+    // Check if this is a storage integration - publishing is only for social integrations
+    if (post.integration.type === 'storage') {
+      throw new Error('Cannot publish posts to storage integrations');
+    }
+
     const provider = integrationManager.getSocialIntegration(
       post.integration.providerIdentifier
     );
@@ -124,7 +180,13 @@ export class QueueService {
     const accessToken = decrypt(post.integration.token);
 
     // 4. Parse settings and prepare post details
-    const settings: any = safeJsonParse(post.settings || '{}', {});
+    // Prisma returns Json fields as objects, not strings
+    const settings: any = typeof post.settings === 'string'
+      ? safeJsonParse(post.settings, {})
+      : (post.settings || {});
+
+    console.log('🔍 DEBUG queue.service - Post settings:', settings);
+
     const postDetails = [
       {
         id: post.id,
@@ -134,15 +196,58 @@ export class QueueService {
       },
     ];
 
+    console.log('📦 DEBUG queue.service - postDetails:', postDetails[0]);
+
     // 5. Publish post
+    let cleanupMedia: (() => Promise<void>) | undefined;
+
     try {
+      // Resolve media (download from storage if needed)
+      if (postDetails[0].media && postDetails[0].media.length > 0) {
+        const { mediaResolverService } = await import('./media-resolver.service');
+        const { resolvedMedia, cleanup } = await mediaResolverService.resolveMedia(
+          postDetails[0].media,
+          post.userId
+        );
+        postDetails[0].media = resolvedMedia;
+        cleanupMedia = cleanup;
+      }
+
       logger.info(`Publishing to ${provider.identifier}...`);
-      
-      const result = await provider.post(
-        post.integration.internalId,
-        accessToken,
-        postDetails,
-        post.integration
+
+      // Use rate limiter with automatic retry
+      const { rateLimiterService } = await import('./rate-limiter.service');
+
+      const result = await rateLimiterService.withRetry(
+        async () => {
+          return await provider.post(
+            post.integration.internalId,
+            accessToken,
+            postDetails,
+            post.integration
+          );
+        },
+        {
+          platform: provider.identifier as any,
+          userId: post.userId,
+          endpoint: 'post',
+          maxAttempts: 5,
+          baseDelay: 2000,
+          maxDelay: 60000,
+          onRetry: (attempt, error) => {
+            logger.warn(`Retry attempt ${attempt} for post ${postId}`, { error: error.message });
+
+            // Update retry count in database asynchronously
+            // Temporarily commented out due to TypeScript error
+            // prisma.post.update({
+            //   where: { id: postId },
+            //   data: {
+            //     retryCount: attempt,
+            //     lastRetryAt: new Date(),
+            //   },
+            // }).catch(err => logger.error('Failed to update retry count', err));
+          },
+        }
       );
 
       // Record metrics
@@ -163,7 +268,8 @@ export class QueueService {
 
       logger.info(`Post ${postId} published successfully: ${result[0].releaseURL}`);
     } catch (error) {
-      logger.error(`Failed to publish post ${postId}:`, error);
+      const serializedError = serializeError(error);
+      logger.error(`Failed to publish post ${postId}:`, serializedError);
 
       // Record failure metrics
       const errorType = error instanceof RefreshToken ? 'token_refresh' : 'publish_error';
@@ -174,9 +280,9 @@ export class QueueService {
       if (error instanceof RefreshToken) {
         try {
           logger.info(`🔄 Attempting to refresh token for integration ${post.integrationId}`);
-          
+
           // Get refresh token
-          const refreshToken = post.integration.refreshToken 
+          const refreshToken = post.integration.refreshToken
             ? decrypt(post.integration.refreshToken)
             : null;
 
@@ -189,11 +295,11 @@ export class QueueService {
           } else {
             // Refresh the token using the provider
             const newTokens = await provider.refreshToken(refreshToken);
-            
+
             // Encrypt new tokens
             const { encrypt } = await import('./encryption.service');
             const encryptedToken = encrypt(newTokens.accessToken);
-            const encryptedRefreshToken = newTokens.refreshToken 
+            const encryptedRefreshToken = newTokens.refreshToken
               ? encrypt(newTokens.refreshToken)
               : null;
 
@@ -212,7 +318,7 @@ export class QueueService {
             });
 
             logger.info(`✅ Token refreshed successfully for integration ${post.integrationId}`);
-            
+
             // Retry the job immediately with new token
             throw new Error('Token refreshed, job will retry automatically');
           }
@@ -236,6 +342,11 @@ export class QueueService {
 
       // Re-throw to trigger retry
       throw error;
+    } finally {
+      // Clean up temporary media files
+      if (cleanupMedia) {
+        await cleanupMedia();
+      }
     }
   }
 

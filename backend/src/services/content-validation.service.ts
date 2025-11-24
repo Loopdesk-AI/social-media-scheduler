@@ -77,6 +77,13 @@ export class ContentValidationService {
         return result;
       }
 
+      // Check if this is a storage integration - validation is only for social integrations
+      if (integration.type === 'storage') {
+        result.errors.push('Content validation is only available for social media accounts, not storage accounts');
+        result.isValid = false;
+        return result;
+      }
+
       // Get provider for this integration
       const provider = integrationManager.getSocialIntegration(integration.providerIdentifier);
       

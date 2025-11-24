@@ -189,7 +189,7 @@ export class MediaService {
         state: 'QUEUE',
         deletedAt: null,
         settings: {
-          contains: media.id,
+          array_contains: media.id,
         },
       },
     });

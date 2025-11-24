@@ -27,7 +27,7 @@ export type Clip = {
 };
 
 // Navigation types
-export type ViewType = 'calendar' | 'analytics' | 'social';
+export type ViewType = 'calendar' | 'analytics' | 'social' | 'content-library' | 'account';
 
 // Date types for calendar
 export type CalendarDay = {

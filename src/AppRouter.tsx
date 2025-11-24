@@ -24,29 +24,42 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+import { Toaster } from "sonner";
+
 export function AppRouter() {
   return (
     <BrowserRouter>
+      <Toaster position="top-right" theme="dark" />
       <AppProvider>
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          
-          {/* Protected routes */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <App />
-              </ProtectedRoute>
-            }
-          />
+
+          {/* OAuth callback routes */}
           <Route
             path="/integrations/social/:provider"
             element={
               <ProtectedRoute>
                 <OAuthCallback />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/integrations/storage/:provider"
+            element={
+              <ProtectedRoute>
+                <OAuthCallback />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Main app route */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <App />
               </ProtectedRoute>
             }
           />

@@ -1,6 +1,7 @@
 // Cloudflare R2 storage implementation
 
 import { StorageProvider } from './storage.interface';
+/*
 import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { createReadStream } from 'fs';
 import { stat } from 'fs/promises';
@@ -80,3 +81,4 @@ export class R2Storage implements StorageProvider {
     return response.ContentLength || 0;
   }
 }
+*/

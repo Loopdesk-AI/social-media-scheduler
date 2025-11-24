@@ -40,9 +40,12 @@ export class AggregatedAnalyticsController {
         where: integrationWhere,
       });
 
+      // Filter out storage integrations - analytics are only for social integrations
+      const socialIntegrations = integrations.filter(integration => integration.type !== 'storage');
+
       // Fetch analytics for each integration
       const analyticsData = await Promise.all(
-        integrations.map(async (integration) => {
+        socialIntegrations.map(async (integration) => {
           try {
             const provider = integrationManager.getSocialIntegration(
               integration.providerIdentifier

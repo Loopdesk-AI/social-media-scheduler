@@ -33,6 +33,12 @@ export function EnhancedAnalyticsView() {
   const [showFilters, setShowFilters] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
 
+  // Filter integrations to only show social providers (exclude storage providers)
+  const socialIntegrations = integrations.filter(integration => 
+    integration.providerIdentifier !== 'google-drive' && 
+    integration.providerIdentifier !== 'dropbox'
+  );
+
   // Fetch analytics when filters change
   useEffect(() => {
     fetchAggregatedAnalytics();
@@ -284,7 +290,7 @@ export function EnhancedAnalyticsView() {
             <div>
               <h3 className="text-white font-medium mb-3">Platforms</h3>
               <div className="space-y-2">
-                {integrations.map(integration => (
+                {socialIntegrations.map(integration => (
                   <label key={integration.id} className="flex items-center gap-2">
                     <input
                       type="checkbox"

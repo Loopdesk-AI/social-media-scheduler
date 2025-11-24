@@ -4,7 +4,14 @@ import { TwitterApi, EUploadMimeType } from 'twitter-api-v2';
 import { SocialAbstract } from '../../base/social.abstract';
 import { SocialProvider, AuthTokenDetails, PostDetails, PostResponse, AnalyticsData } from '../../base/social.interface';
 import { mapTwitterError } from './twitter.errors';
-import { TwitterPostSettings, TwitterTweetResponse, TwitterUserResponse } from './twitter.types';
+import {
+  TwitterPostSettings,
+  TwitterTweetResponse,
+  TwitterUserResponse,
+  TwitterThreadSettings,
+  TwitterQuoteTweetSettings,
+  TwitterMediaAltText,
+} from './twitter.types';
 import {
   validateTweetLength,
   validatePollOptions,
@@ -19,6 +26,8 @@ import {
   wait,
 } from './twitter.utils';
 import { makeId } from '../../../utils/helpers';
+import { rateLimiterService } from '../../../services/rate-limiter.service';
+import logger from '../../../utils/logger';
 
 export class TwitterProvider extends SocialAbstract implements SocialProvider {
   identifier = 'twitter';
@@ -42,7 +51,7 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
     const state = makeId(6);
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = await generateCodeChallenge(codeVerifier);
-    
+
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: process.env.TWITTER_CLIENT_ID!,
@@ -95,11 +104,11 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
     } catch (error: any) {
       const errorBody = error.data ? JSON.stringify(error.data) : error.message;
       const mappedError = this.handleErrors(errorBody, error.code);
-      
+
       if (mappedError) {
         throw new Error(mappedError.value);
       }
-      
+
       throw error;
     }
   }
@@ -112,7 +121,7 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
       });
 
       // Refresh access token
-      const { client: refreshedClient, accessToken, refreshToken: newRefreshToken, expiresIn } = 
+      const { client: refreshedClient, accessToken, refreshToken: newRefreshToken, expiresIn } =
         await client.refreshOAuth2Token(refresh_token);
 
       // Fetch updated user profile
@@ -132,11 +141,11 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
     } catch (error: any) {
       const errorBody = error.data ? JSON.stringify(error.data) : error.message;
       const mappedError = this.handleErrors(errorBody, error.code);
-      
+
       if (mappedError) {
         throw new Error(mappedError.value);
       }
-      
+
       throw error;
     }
   }
@@ -166,14 +175,18 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
     }
 
     try {
+      // Check rate limit
+      await rateLimiterService.waitForRateLimit('twitter', id, 'tweets');
+      logger.info('Posting tweet to Twitter', { id, textLength: settings.text.length, hasMedia: (postDetail.media?.length || 0) > 0 });
+
       const client = new TwitterApi(accessToken);
 
       // Upload media if present
       const mediaIds: string[] = [];
-      
+
       if (postDetail.media && postDetail.media.length > 0) {
         const mediaType = getMediaType(postDetail.media[0].path);
-        
+
         if (mediaType !== 'unknown' && !validateMediaCount(postDetail.media.length, mediaType)) {
           throw new Error('Twitter supports max 4 images or 1 video/GIF per tweet');
         }
@@ -224,11 +237,11 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
     } catch (error: any) {
       const errorBody = error.data ? JSON.stringify(error.data) : error.message;
       const mappedError = this.handleErrors(errorBody, error.code);
-      
+
       if (mappedError) {
         throw new Error(mappedError.value);
       }
-      
+
       throw error;
     }
   }
@@ -239,7 +252,7 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
     mediaType: 'image' | 'video' | 'gif'
   ): Promise<string> {
     let mimeType: EUploadMimeType;
-    
+
     if (mediaType === 'image') {
       mimeType = EUploadMimeType.Jpeg;
     } else if (mediaType === 'video') {
@@ -259,7 +272,7 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
   ): Promise<AnalyticsData[]> {
     try {
       const client = new TwitterApi(accessToken);
-      
+
       const startDate = new Date(date);
       const endDate = new Date();
 
@@ -281,13 +294,13 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
       for (const tweet of timeline.data.data || []) {
         const date = formatDate(new Date(tweet.created_at!));
         const metrics = tweet.public_metrics!;
-        
+
         impressionsData.push({ date, total: metrics.impression_count || 0 });
         likesData.push({ date, total: metrics.like_count });
         repliesData.push({ date, total: metrics.reply_count });
         retweetsData.push({ date, total: metrics.retweet_count });
         quotesData.push({ date, total: metrics.quote_count || 0 });
-        
+
         const engagement = calculateEngagementRate(
           metrics.like_count,
           metrics.reply_count,
@@ -313,9 +326,111 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
     }
   }
 
-  public override handleErrors(body: string, statusCode?: number): 
+  public override handleErrors(body: string, statusCode?: number):
     | { type: 'refresh-token' | 'bad-body' | 'retry'; value: string }
     | undefined {
     return mapTwitterError(body, statusCode);
+  }
+
+  /**
+   * Post a thread (multiple related tweets)
+   * Uses the existing splitIntoThread utility to intelligently split long text
+   */
+  async postThread(
+    id: string,
+    accessToken: string,
+    settings: TwitterThreadSettings
+  ): Promise<string[]> {
+    await rateLimiterService.waitForRateLimit('twitter', id, 'tweets');
+    logger.info('Posting thread to Twitter', { id, tweetCount: settings.tweets.length });
+
+    const client = new TwitterApi(accessToken);
+    const tweetIds: string[] = [];
+    let previousTweetId: string | undefined;
+
+    // Post tweets in sequence, each replying to the previous
+    for (let i = 0; i < settings.tweets.length; i++) {
+      const tweetData = settings.tweets[i];
+
+      const postData: any = {
+        text: tweetData.text,
+      };
+
+      if (tweetData.mediaIds && tweetData.mediaIds.length > 0) {
+        postData.media = { media_ids: tweetData.mediaIds };
+      }
+
+      if (previousTweetId) {
+        postData.reply = {
+          in_reply_to_tweet_id: previousTweetId,
+        };
+      }
+
+      if (settings.reply_settings && i === 0) {
+        postData.reply_settings = settings.reply_settings;
+      }
+
+      const tweet = await client.v2.tweet(postData);
+      tweetIds.push(tweet.data.id);
+      previousTweetId = tweet.data.id;
+
+      // Add small delay between tweets to avoid rate limiting
+      if (i < settings.tweets.length - 1) {
+        await wait(1000);
+      }
+    }
+
+    logger.info('Thread posted successfully', { id, tweetIds });
+    return tweetIds;
+  }
+
+  /**
+   * Quote tweet - tweet with a link to another tweet
+   * Allows commenting on or sharing another tweet with added context
+   */
+  async quoteTweet(
+    id: string,
+    accessToken: string,
+    settings: TwitterQuoteTweetSettings
+  ): Promise<string> {
+    await rateLimiterService.waitForRateLimit('twitter', id, 'tweets');
+    logger.info('Posting quote tweet to Twitter', { id, quotedTweetId: settings.quotedTweetId });
+
+    const client = new TwitterApi(accessToken);
+
+    const tweetData: any = {
+      text: settings.text,
+      quote_tweet_id: settings.quotedTweetId,
+    };
+
+    if (settings.mediaIds && settings.mediaIds.length > 0) {
+      tweetData.media = { media_ids: settings.mediaIds };
+    }
+
+    const tweet = await client.v2.tweet(tweetData);
+
+    logger.info('Quote tweet posted successfully', { id, tweetId: tweet.data.id });
+    return tweet.data.id;
+  }
+
+  /**
+   * Add alt text to media for accessibility
+   * Should be called after uploading media but before posting
+   */
+  async addMediaAltText(
+    accessToken: string,
+    altTextData: TwitterMediaAltText[]
+  ): Promise<void> {
+    logger.info('Adding alt text to media', { mediaCount: altTextData.length });
+
+    const client = new TwitterApi(accessToken);
+
+    for (const { mediaId, altText } of altTextData) {
+      await client.v1.createMediaMetadata(mediaId, {
+        alt_text: { text: altText },
+      });
+    }
+
+    logger.info('Alt text added successfully');
   }
 }

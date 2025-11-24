@@ -23,7 +23,7 @@ const ENV_VALIDATIONS: EnvValidation[] = [
     name: 'FRONTEND_URL',
     required: false,
   },
-  
+
   // Database
   {
     name: 'DATABASE_URL',
@@ -35,24 +35,19 @@ const ENV_VALIDATIONS: EnvValidation[] = [
       return { valid: true };
     },
   },
-  
+
   // Redis
   {
-    name: 'REDIS_HOST',
-    required: true,
-  },
-  {
-    name: 'REDIS_PORT',
+    name: 'REDIS_URL',
     required: true,
     validator: (value) => {
-      const port = parseInt(value, 10);
-      if (isNaN(port) || port < 1 || port > 65535) {
-        return { valid: false, message: 'Must be a valid port number (1-65535)' };
+      if (!value.startsWith('redis://') && !value.startsWith('rediss://')) {
+        return { valid: false, message: 'Must be a valid Redis connection string (redis:// or rediss://)' };
       }
       return { valid: true };
     },
   },
-  
+
   // Encryption
   {
     name: 'ENCRYPTION_KEY',
@@ -74,22 +69,22 @@ const ENV_VALIDATIONS: EnvValidation[] = [
       return { valid: true };
     },
   },
-  
+
   // JWT
   {
     name: 'JWT_SECRET',
-    required: false, // Optional, has default
+    required: true,
     validator: (value) => {
       if (value.length < 32) {
         return {
           valid: false,
-          message: 'Should be at least 32 characters for security',
+          message: 'Must be at least 32 characters for security',
         };
       }
       return { valid: true };
     },
   },
-  
+
   // OAuth - Instagram/Facebook
   {
     name: 'FACEBOOK_APP_ID',
@@ -99,7 +94,7 @@ const ENV_VALIDATIONS: EnvValidation[] = [
     name: 'FACEBOOK_APP_SECRET',
     required: false,
   },
-  
+
   // OAuth - YouTube
   {
     name: 'YOUTUBE_CLIENT_ID',
@@ -109,7 +104,7 @@ const ENV_VALIDATIONS: EnvValidation[] = [
     name: 'YOUTUBE_CLIENT_SECRET',
     required: false,
   },
-  
+
   // OAuth - TikTok
   {
     name: 'TIKTOK_CLIENT_KEY',
@@ -119,7 +114,7 @@ const ENV_VALIDATIONS: EnvValidation[] = [
     name: 'TIKTOK_CLIENT_SECRET',
     required: false,
   },
-  
+
   // OAuth - LinkedIn
   {
     name: 'LINKEDIN_CLIENT_ID',
@@ -129,7 +124,7 @@ const ENV_VALIDATIONS: EnvValidation[] = [
     name: 'LINKEDIN_CLIENT_SECRET',
     required: false,
   },
-  
+
   // OAuth - Twitter
   {
     name: 'TWITTER_CLIENT_ID',
@@ -139,7 +134,7 @@ const ENV_VALIDATIONS: EnvValidation[] = [
     name: 'TWITTER_CLIENT_SECRET',
     required: false,
   },
-  
+
   // Storage
   {
     name: 'STORAGE_TYPE',
@@ -151,29 +146,57 @@ const ENV_VALIDATIONS: EnvValidation[] = [
       return { valid: true };
     },
   },
+
+  // Google Drive OAuth
+  {
+    name: 'GOOGLE_DRIVE_CLIENT_ID',
+    required: false,
+  },
+  {
+    name: 'GOOGLE_DRIVE_CLIENT_SECRET',
+    required: false,
+  },
+  {
+    name: 'GOOGLE_DRIVE_REDIRECT_URI',
+    required: false,
+  },
+
+  // Dropbox OAuth
+  {
+    name: 'DROPBOX_CLIENT_ID',
+    required: false,
+  },
+  {
+    name: 'DROPBOX_CLIENT_SECRET',
+    required: false,
+  },
+  {
+    name: 'DROPBOX_REDIRECT_URI',
+    required: false,
+  },
 ];
 
 export function validateEnvironment(): void {
   console.log('🔍 Validating environment variables...\n');
-  
+
   const errors: string[] = [];
   const warnings: string[] = [];
-  
+
   for (const validation of ENV_VALIDATIONS) {
     const value = process.env[validation.name];
-    
+
     // Check if required variable is missing
     if (validation.required && !value) {
       errors.push(`❌ ${validation.name} is required but not set`);
       continue;
     }
-    
+
     // Skip validation if optional and not set
     if (!validation.required && !value) {
       warnings.push(`⚠️  ${validation.name} is not set (optional)`);
       continue;
     }
-    
+
     // Run custom validator if provided
     if (value && validation.validator) {
       const result = validation.validator(value);
@@ -182,7 +205,7 @@ export function validateEnvironment(): void {
       }
     }
   }
-  
+
   // Print results
   if (errors.length > 0) {
     console.error('Environment validation failed:\n');
@@ -190,12 +213,12 @@ export function validateEnvironment(): void {
     console.error('\nPlease check your .env file and fix the errors above.');
     process.exit(1);
   }
-  
+
   if (warnings.length > 0) {
     console.warn('Environment warnings:\n');
     warnings.forEach(warning => console.warn(warning));
     console.warn('');
   }
-  
+
   console.log('✅ Environment validation passed\n');
 }

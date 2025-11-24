@@ -192,6 +192,78 @@ class IntegrationService {
   }
 
   /**
+   * List integrations for user by type
+   */
+  async getIntegrationsByUserIdAndType(userId: string, type: string) {
+    const integrations = await prisma.integration.findMany({
+      where: {
+        userId,
+        type,
+        deletedAt: null,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return integrations.map((integration: any) => {
+      const isExpired = integration.tokenExpiration
+        ? dayjs(integration.tokenExpiration).isBefore(dayjs())
+        : false;
+
+      return {
+        id: integration.id,
+        internalId: integration.internalId,
+        name: integration.name,
+        picture: integration.picture,
+        providerIdentifier: integration.providerIdentifier,
+        type: integration.type,
+        disabled: integration.disabled,
+        refreshNeeded: integration.refreshNeeded || isExpired,
+        profile: integration.profile,
+        createdAt: integration.createdAt,
+      };
+    });
+  }
+
+  /**
+   * Get single integration by ID
+   */
+  async getIntegrationById(id: string) {
+    const integration = await prisma.integration.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+      },
+    });
+
+    if (!integration) {
+      return null;
+    }
+
+    const isExpired = integration.tokenExpiration
+      ? dayjs(integration.tokenExpiration).isBefore(dayjs())
+      : false;
+
+    return {
+      id: integration.id,
+      userId: integration.userId,
+      internalId: integration.internalId,
+      name: integration.name,
+      picture: integration.picture,
+      providerIdentifier: integration.providerIdentifier,
+      type: integration.type,
+      token: integration.token,
+      refreshToken: integration.refreshToken,
+      tokenExpiration: integration.tokenExpiration,
+      disabled: integration.disabled,
+      refreshNeeded: integration.refreshNeeded || isExpired,
+      profile: integration.profile,
+      createdAt: integration.createdAt,
+    };
+  }
+
+  /**
    * List all integrations for user
    */
   async listIntegrations(userId: string) {
@@ -334,6 +406,84 @@ class IntegrationService {
     console.log(`🔄 Reconnected integration: ${integration.name}`);
 
     return { success: true };
+  }
+
+  /**
+   * Create or update storage integration
+   */
+  async createOrUpdateStorageIntegration(
+    userId: string,
+    providerIdentifier: string,
+    authDetails: any
+  ) {
+    // Encrypt tokens
+    const encryptedToken = encrypt(authDetails.accessToken);
+    const encryptedRefreshToken = authDetails.refreshToken
+      ? encrypt(authDetails.refreshToken)
+      : null;
+
+    // Calculate expiration
+    const tokenExpiration = authDetails.expiresIn
+      ? new Date(Date.now() + authDetails.expiresIn * 1000)
+      : null;
+
+    // Check if integration already exists
+    const existingIntegration = await prisma.integration.findFirst({
+      where: {
+        userId,
+        internalId: authDetails.id,
+        providerIdentifier,
+        type: 'storage',
+      },
+    });
+
+    let integration;
+    if (existingIntegration) {
+      // Update existing integration
+      integration = await prisma.integration.update({
+        where: { id: existingIntegration.id },
+        data: {
+          name: authDetails.name,
+          picture: authDetails.picture,
+          token: encryptedToken,
+          refreshToken: encryptedRefreshToken,
+          tokenExpiration,
+          disabled: false,
+          refreshNeeded: false,
+          deletedAt: null,
+          profile: JSON.stringify({
+            email: authDetails.email,
+          }),
+        },
+      });
+      console.log(`✅ Updated storage integration: ${integration.name} (${providerIdentifier})`);
+    } else {
+      // Create new integration
+      integration = await prisma.integration.create({
+        data: {
+          internalId: authDetails.id,
+          userId,
+          name: authDetails.name,
+          picture: authDetails.picture,
+          providerIdentifier,
+          type: 'storage',
+          token: encryptedToken,
+          refreshToken: encryptedRefreshToken,
+          tokenExpiration,
+          profile: JSON.stringify({
+            email: authDetails.email,
+          }),
+        },
+      });
+      console.log(`✅ Created storage integration: ${integration.name} (${providerIdentifier})`);
+    }
+
+    return {
+      id: integration.id,
+      name: integration.name,
+      picture: integration.picture,
+      providerIdentifier: integration.providerIdentifier,
+    };
   }
 
   /**

@@ -32,6 +32,7 @@ export interface LinkedInUGCPostSettings {
   visibility?: 'PUBLIC' | 'CONNECTIONS';
   isOrganization?: boolean;
   organizationId?: string;
+  clipTitle?: string;
 }
 
 export interface LinkedInShareContent {
@@ -141,4 +142,83 @@ export interface LinkedInMediaAsset {
   urn: string;
   uploadUrl: string;
   headers: Record<string, string>;
+}
+
+export interface LinkedInCarouselCard {
+  imageUrl: string;
+  title: string;
+  description?: string;
+  landingPageUrl?: string;
+}
+
+export interface LinkedInCarouselSettings {
+  text: string;
+  cards: LinkedInCarouselCard[]; // 2-10 cards
+  isOrganization?: boolean;
+  organizationId?: string;
+}
+
+export interface LinkedInHashtagSuggestion {
+  hashtag: string;
+  relevanceScore?: number;
+}
+
+// ===== Videos API Types (NEW) =====
+
+export interface LinkedInVideoInitializeRequest {
+  initializeUploadRequest: {
+    owner: string; // URN
+    fileSizeBytes: number;
+    uploadCaptions: boolean;
+    uploadThumbnail: boolean;
+  };
+}
+
+export interface LinkedInVideoUploadInstruction {
+  uploadUrl: string;
+  firstByte: number;
+  lastByte: number;
+}
+
+export interface LinkedInVideoInitializeResponse {
+  value: {
+    video: string; // Video URN
+    uploadInstructions: LinkedInVideoUploadInstruction[];
+    uploadToken?: string;
+  };
+}
+
+export interface LinkedInVideoFinalizeRequest {
+  finalizeUploadRequest: {
+    video: string; // Video URN
+    uploadToken: string;
+    uploadedPartIds: string[];
+  };
+}
+
+// ===== Posts API Types (NEW - /rest/posts) =====
+
+export interface LinkedInPostRequest {
+  author: string; // URN
+  commentary: string;
+  visibility: 'PUBLIC' | 'CONNECTIONS';
+  distribution: {
+    feedDistribution: 'MAIN_FEED';
+    targetEntities: any[];
+    thirdPartyDistributionChannels: any[];
+  };
+  content?: {
+    media?: {
+      title?: string;
+      id: string; // URN
+    };
+    article?: {
+      source: string;
+      thumbnail?: string;
+      title?: string;
+      description?: string;
+    };
+  };
+  lifecycleState: 'PUBLISHED' | 'DRAFT';
+  isReshareDisabledByAuthor: boolean;
 }
