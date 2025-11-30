@@ -1,10 +1,14 @@
 // Cloudflare R2 storage implementation
 
-import { StorageProvider } from './storage.interface';
-/*
-import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
-import { createReadStream } from 'fs';
-import { stat } from 'fs/promises';
+import { StorageProvider } from "./storage.interface";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+} from "@aws-sdk/client-s3";
+import { createReadStream } from "fs";
+import { stat } from "fs/promises";
 
 export class R2Storage implements StorageProvider {
   private client: S3Client;
@@ -12,14 +16,22 @@ export class R2Storage implements StorageProvider {
   private publicUrl: string;
 
   constructor() {
-    const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID!;
-    const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY!;
-    const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_KEY!;
-    this.bucket = process.env.CLOUDFLARE_R2_BUCKET!;
-    this.publicUrl = process.env.CLOUDFLARE_R2_PUBLIC_URL || `https://${this.bucket}.r2.cloudflarestorage.com`;
+    const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
+    const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY;
+    const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_KEY;
+    this.bucket = process.env.CLOUDFLARE_R2_BUCKET || "";
+    this.publicUrl =
+      process.env.CLOUDFLARE_R2_PUBLIC_URL ||
+      `https://${this.bucket}.r2.cloudflarestorage.com`;
+
+    if (!accountId || !accessKeyId || !secretAccessKey || !this.bucket) {
+      throw new Error(
+        "Cloudflare R2 configuration is incomplete. Required: CLOUDFLARE_R2_ACCOUNT_ID, CLOUDFLARE_R2_ACCESS_KEY, CLOUDFLARE_R2_SECRET_KEY, CLOUDFLARE_R2_BUCKET",
+      );
+    }
 
     this.client = new S3Client({
-      region: 'auto',
+      region: "auto",
       endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
       credentials: {
         accessKeyId,
@@ -38,19 +50,26 @@ export class R2Storage implements StorageProvider {
         Key: destination,
         Body: fileStream,
         ContentLength: stats.size,
-      })
+      }),
     );
 
     return destination;
   }
 
   async delete(path: string): Promise<void> {
-    await this.client.send(
-      new DeleteObjectCommand({
-        Bucket: this.bucket,
-        Key: path,
-      })
-    );
+    try {
+      await this.client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: path,
+        }),
+      );
+    } catch (error: any) {
+      // Ignore if file doesn't exist
+      if (error.name !== "NoSuchKey") {
+        throw error;
+      }
+    }
   }
 
   async getUrl(path: string): Promise<string> {
@@ -63,7 +82,7 @@ export class R2Storage implements StorageProvider {
         new HeadObjectCommand({
           Bucket: this.bucket,
           Key: path,
-        })
+        }),
       );
       return true;
     } catch {
@@ -76,9 +95,8 @@ export class R2Storage implements StorageProvider {
       new HeadObjectCommand({
         Bucket: this.bucket,
         Key: path,
-      })
+      }),
     );
     return response.ContentLength || 0;
   }
 }
-*/

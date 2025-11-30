@@ -11,7 +11,6 @@ import { chatRoutes } from "./routes/chat.routes";
 import { userRoutes } from "./routes/user.routes";
 import { monitoringRoutes } from "./routes/monitoring.routes";
 import { errorMiddleware } from "./middleware/error.middleware";
-import { join } from "path";
 
 const app = express();
 
@@ -31,18 +30,10 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Serve uploaded files
-app.use("/uploads", express.static(process.env.STORAGE_PATH || "./uploads"));
-
 // Logging
 if (process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
-
-// Static file serving for uploads
-const uploadsPath =
-  process.env.STORAGE_LOCAL_PATH || join(process.cwd(), "uploads");
-app.use("/uploads", express.static(uploadsPath));
 
 // Monitoring routes (health, etc.)
 app.use(monitoringRoutes);
@@ -56,7 +47,7 @@ if (
   app.use("/admin/queues", serverAdapter.getRouter());
 }
 
-// API routes (no auth middleware - authentication removed)
+// API routes
 app.use("/api/integrations", integrationsRoutes);
 app.use("/api/posts", postsRoutes);
 app.use("/api/media", mediaRoutes);

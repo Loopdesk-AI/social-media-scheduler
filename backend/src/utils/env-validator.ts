@@ -158,6 +158,28 @@ const ENV_VALIDATIONS: EnvValidation[] = [
     name: "DROPBOX_REDIRECT_URI",
     required: false,
   },
+
+  // Cloudflare R2 Storage (required)
+  {
+    name: "CLOUDFLARE_R2_ACCOUNT_ID",
+    required: true,
+  },
+  {
+    name: "CLOUDFLARE_R2_ACCESS_KEY",
+    required: true,
+  },
+  {
+    name: "CLOUDFLARE_R2_SECRET_KEY",
+    required: true,
+  },
+  {
+    name: "CLOUDFLARE_R2_BUCKET",
+    required: true,
+  },
+  {
+    name: "CLOUDFLARE_R2_PUBLIC_URL",
+    required: false,
+  },
 ];
 
 export function validateEnvironment(): void {

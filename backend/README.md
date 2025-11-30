@@ -8,7 +8,7 @@ Express.js backend for the Social Media Scheduler application.
 - **Framework**: Express.js
 - **Database**: PostgreSQL with Drizzle ORM
 - **Queue**: BullMQ with Redis
-- **Storage**: Local or Cloudflare R2
+- **Storage**: Cloudflare R2
 
 ## Prerequisites
 
@@ -69,6 +69,13 @@ GOOGLE_DRIVE_REDIRECT_URI=
 DROPBOX_CLIENT_ID=
 DROPBOX_CLIENT_SECRET=
 DROPBOX_REDIRECT_URI=
+
+# Cloudflare R2 Storage (required)
+CLOUDFLARE_R2_ACCOUNT_ID=your-account-id
+CLOUDFLARE_R2_ACCESS_KEY=your-access-key
+CLOUDFLARE_R2_SECRET_KEY=your-secret-key
+CLOUDFLARE_R2_BUCKET=your-bucket-name
+CLOUDFLARE_R2_PUBLIC_URL=https://your-bucket.your-domain.com
 ```
 
 ## Installation
