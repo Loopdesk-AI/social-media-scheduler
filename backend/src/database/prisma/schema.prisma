@@ -1,0 +1,172 @@
+// Prisma schema for social media scheduler
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String              @id @default(uuid())
+  email             String              @unique
+  password          String?
+  name              String?
+  timezone          Int                 @default(0)
+  integrations      Integration[]
+  posts             Post[]
+  media             Media[]
+  conversations     Conversation[]
+  geminiApiKey      String?             // Stored securely (consider encryption in production)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([email])
+}
+
+model Integration {
+  id                 String       @id @default(cuid())
+  internalId         String       // Platform-specific account ID (e.g., Instagram account ID)
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String       // Account display name
+  picture            String?      // Profile picture URL
+  providerIdentifier String       // 'instagram', 'youtube', 'google-drive', 'dropbox'
+  type               String       // 'social' or 'storage'
+  token              String       // Encrypted access token
+  refreshToken       String?      // Encrypted refresh token
+  tokenExpiration    DateTime?    // Token expiration date
+  disabled           Boolean      @default(false)
+  refreshNeeded      Boolean      @default(false)
+  profile            String?      // Additional profile data (JSON)
+  
+  // New fields for enhanced functionality
+  settings           Json?        // Platform-specific settings (default hashtags, etc.)
+  healthStatus       String       @default("healthy") // "healthy", "warning", "error"
+  lastHealthCheck    DateTime?    // Last health check timestamp
+  metadata           Json?        // Additional platform metadata (page type, org role, etc.)
+  
+  posts              Post[]
+  analytics          Analytics[]
+  deletedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([userId, internalId])
+  @@index([userId])
+  @@index([providerIdentifier])
+  @@index([refreshNeeded])
+  @@index([healthStatus])
+  @@index([lastHealthCheck])
+  @@index([deletedAt])
+}
+
+model Post {
+  id             String       @id @default(cuid())
+  state          State        @default(QUEUE)
+  publishDate    DateTime
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integrationId  String
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  content        String       @db.Text // Post caption/description
+  group          String       // UUID for multi-platform posts
+  settings       Json?        // Platform-specific settings (JSON)
+  releaseId      String?      // Platform post ID
+  releaseURL     String?      // Published post URL
+  error          String?      @db.Text // Error message if failed
+  jobId          String?      // BullMQ job ID
+  
+  // New fields for enhanced tracking
+  postType       String       @default("standard") // "standard", "story", "carousel", "thread"
+  mediaMetadata  Json?        // Media-specific metadata (alt text, thumbnails, etc.)
+  scheduledBy    String?      // "user" or "ai-optimization"
+  retryCount     Int          @default(0) // Number of retry attempts
+  lastRetryAt    DateTime?    // Last retry timestamp
+  
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([integrationId])
+  @@index([state])
+  @@index([publishDate])
+  @@index([group])
+  @@index([postType])
+  @@index([retryCount])
+  @@index([deletedAt])
+}
+
+model Media {
+  id                 String       @id @default(uuid())
+  name               String
+  path               String       // Storage path or URL
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thumbnail          String?      // Thumbnail path
+  thumbnailTimestamp Int?         // Video thumbnail timestamp (seconds)
+  type               String       // 'image' or 'video'
+  fileSize           Int          @default(0)
+  deletedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([type])
+  @@index([deletedAt])
+}
+
+model Analytics {
+  id               String       @id @default(cuid())
+  integrationId    String
+  integration      Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  date             DateTime
+  platform         String       // "facebook", "linkedin", "twitter", "instagram", "youtube"
+  metrics          Json         // Platform-specific metrics
+  createdAt        DateTime     @default(now())
+  
+  @@unique([integrationId, date, platform])
+  @@index([date])
+  @@index([platform])
+  @@index([integrationId])
+}
+
+model Conversation {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String        // Auto-generated from first message
+  platform    String?       // 'linkedin', 'twitter', 'instagram', 'youtube', 'tiktok', 'custom'
+  template    String?       // Template type used
+  messages    ChatMessage[]
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId, deletedAt])
+  @@index([createdAt])
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // 'user' or 'assistant'
+  content        String       @db.Text
+  metadata       Json?        // Platform-specific data
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+enum State {
+  QUEUE
+  PUBLISHED
+  ERROR
+  DRAFT
+}

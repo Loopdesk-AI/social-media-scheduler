@@ -4,17 +4,11 @@ export const platforms: Platform[] = [
   {
     id: 'youtube',
     name: 'YouTube',
-    description: 'Channel',
+    description: 'Channel (Video required)',
     icon: 'https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg',
     isPro: true,
   },
-  {
-    id: 'tiktok',
-    name: 'TikTok',
-    description: 'Feed or Inbox',
-    icon: 'https://upload.wikimedia.org/wikipedia/en/a/a9/TikTok_logo.svg',
-    isPro: true,
-  },
+
   {
     id: 'linkedin',
     name: 'LinkedIn',
@@ -32,7 +26,7 @@ export const platforms: Platform[] = [
   {
     id: 'instagram',
     name: 'Instagram',
-    description: 'Business or creator',
+    description: 'Business or Creator (Media required)',
     icon: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png',
     isPro: true,
   },

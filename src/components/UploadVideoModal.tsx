@@ -26,7 +26,7 @@ export function UploadVideoModal({
   };
   const handleFileSelect = (file: File) => {
     // Handle file upload logic here
-    console.log('File selected:', file);
+    // console.log('File selected:', file);
   };
   const handleClick = () => {
     fileInputRef.current?.click();

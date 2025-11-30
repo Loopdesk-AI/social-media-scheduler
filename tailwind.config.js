@@ -1,8 +1,9 @@
-module.exports = {content: [
-  './index.html',
-  './src/**/*.{js,ts,jsx,tsx}'
-],
-  darkMode: "selector",
+module.exports = {
+  content: [
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}'
+  ],
+  darkMode: 'class',
   theme: {
     container: {
       center: true,
