@@ -131,18 +131,6 @@ const ENV_VALIDATIONS: EnvValidation[] = [
     required: false,
   },
 
-  // Storage
-  {
-    name: "STORAGE_TYPE",
-    required: false,
-    validator: (value) => {
-      if (!["local", "r2"].includes(value)) {
-        return { valid: false, message: 'Must be either "local" or "r2"' };
-      }
-      return { valid: true };
-    },
-  },
-
   // Google Drive OAuth
   {
     name: "GOOGLE_DRIVE_CLIENT_ID",
