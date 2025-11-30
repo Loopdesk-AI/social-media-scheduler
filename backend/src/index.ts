@@ -18,7 +18,7 @@ import { queueService } from "./services/queue.service";
 import { pool } from "./database/db";
 import { healthService } from "./monitoring/health.service";
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // Start server
 const server = app.listen(PORT, () => {

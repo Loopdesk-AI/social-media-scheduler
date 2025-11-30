@@ -80,7 +80,7 @@ export class MediaService {
 
     // Return media with full URL
     const baseUrl =
-      process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
+      process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
     return {
       ...mediaRecord,
       url: `${baseUrl}/uploads/${path}`,

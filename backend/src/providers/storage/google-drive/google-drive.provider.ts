@@ -1,24 +1,33 @@
-import { google, drive_v3 } from 'googleapis';
-import { BaseStorageProvider } from '../../base/storage.abstract';
-import { StorageAuthDetails, StorageFile, SearchOptions, SharedDrive } from '../../base/storage.interface';
-import { Readable } from 'stream';
+import { google, drive_v3 } from "googleapis";
+import { BaseStorageProvider } from "../../base/storage.abstract";
+import {
+  StorageAuthDetails,
+  StorageFile,
+  SearchOptions,
+  SharedDrive,
+} from "../../base/storage.interface";
+import { Readable } from "stream";
 import {
   generateCodeVerifier,
   generateCodeChallenge,
   buildSearchQuery,
   isGoogleWorkspaceFile,
   getDefaultExportFormat,
-  GOOGLE_WORKSPACE_TYPES
-} from './google-drive.utils';
-import { GoogleDriveError, GoogleDriveNotFoundError, GoogleDriveRateLimitError } from './google-drive.errors';
+  GOOGLE_WORKSPACE_TYPES,
+} from "./google-drive.utils";
+import {
+  GoogleDriveError,
+  GoogleDriveNotFoundError,
+  GoogleDriveRateLimitError,
+} from "./google-drive.errors";
 
 export class GoogleDriveProvider extends BaseStorageProvider {
-  identifier = 'google-drive';
-  name = 'Google Drive';
+  identifier = "google-drive";
+  name = "Google Drive";
   scopes = [
-    'https://www.googleapis.com/auth/drive.readonly',
-    'https://www.googleapis.com/auth/userinfo.profile',
-    'https://www.googleapis.com/auth/userinfo.email'
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/userinfo.email",
   ];
 
   private oauth2Client: any;
@@ -36,7 +45,10 @@ export class GoogleDriveProvider extends BaseStorageProvider {
     } catch (error) {
       // If environment variables are not configured, mark as not configured
       // but don't throw an error to allow the application to start
-      console.warn('Google Drive provider not configured:', (error as Error).message);
+      console.warn(
+        "Google Drive provider not configured:",
+        (error as Error).message,
+      );
       this._isConfigured = false;
     }
   }
@@ -44,18 +56,24 @@ export class GoogleDriveProvider extends BaseStorageProvider {
   private initializeOAuthClient(): void {
     const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_DRIVE_REDIRECT_URI || `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/storage/callback/google-drive`;
+    const redirectUri =
+      process.env.GOOGLE_DRIVE_REDIRECT_URI ||
+      `${process.env.BACKEND_URL || "http://localhost:3000"}/api/storage/callback/google-drive`;
 
-    console.log('Google Drive Config:', { clientId: !!clientId, clientSecret: !!clientSecret, redirectUri });
+    console.log("Google Drive Config:", {
+      clientId: !!clientId,
+      clientSecret: !!clientSecret,
+      redirectUri,
+    });
 
     if (!clientId || !clientSecret) {
-      throw new Error('Google Drive environment variables not configured');
+      throw new Error("Google Drive environment variables not configured");
     }
 
     this.oauth2Client = new google.auth.OAuth2(
       clientId,
       clientSecret,
-      redirectUri
+      redirectUri,
     );
   }
 
@@ -65,22 +83,27 @@ export class GoogleDriveProvider extends BaseStorageProvider {
     state: string;
   }> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     // Generate state parameter for CSRF protection
-    const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const state =
+      Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15);
 
     const authUrl = this.oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      prompt: 'consent', // Force consent screen to always get refresh token
+      access_type: "offline",
+      prompt: "consent", // Force consent screen to always get refresh token
       scope: this.scopes,
-      state: state
+      state: state,
     });
 
     return {
       url: authUrl,
-      state: state
+      state: state,
     };
   }
 
@@ -89,7 +112,10 @@ export class GoogleDriveProvider extends BaseStorageProvider {
     codeVerifier?: string;
   }): Promise<StorageAuthDetails> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     const { code } = params;
@@ -99,69 +125,87 @@ export class GoogleDriveProvider extends BaseStorageProvider {
       const { tokens } = await this.oauth2Client.getToken(code);
 
       console.log(`✅ Google OAuth tokens received:`, {
-        accessToken: tokens.access_token ? 'Present' : 'Missing',
-        refreshToken: tokens.refresh_token ? 'Present' : 'Missing',
-        expiryDate: tokens.expiry_date
+        accessToken: tokens.access_token ? "Present" : "Missing",
+        refreshToken: tokens.refresh_token ? "Present" : "Missing",
+        expiryDate: tokens.expiry_date,
       });
 
       // Set credentials for future requests
       this.oauth2Client.setCredentials(tokens);
 
       // Get user profile information
-      const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
+      const oauth2 = google.oauth2({ version: "v2", auth: this.oauth2Client });
       const userInfo = await oauth2.userinfo.get();
 
       if (!userInfo.data) {
-        throw new GoogleDriveError('Failed to retrieve user information', 'USER_INFO_ERROR');
+        throw new GoogleDriveError(
+          "Failed to retrieve user information",
+          "USER_INFO_ERROR",
+        );
       }
 
       // Get storage quota information
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
-      const about = await drive.about.get({ fields: 'user,storageQuota' });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
+      const about = await drive.about.get({ fields: "user,storageQuota" });
 
-      const quota = about.data.storageQuota ? {
-        used: parseInt(about.data.storageQuota.usage || '0'),
-        total: parseInt(about.data.storageQuota.limit || '0'),
-        unit: 'bytes' as const
-      } : undefined;
+      const quota = about.data.storageQuota
+        ? {
+            used: parseInt(about.data.storageQuota.usage || "0"),
+            total: parseInt(about.data.storageQuota.limit || "0"),
+            unit: "bytes" as const,
+          }
+        : undefined;
 
       return {
         accessToken: tokens.access_token!,
-        refreshToken: tokens.refresh_token || '', // Handle case where refresh token is not provided
-        expiresIn: tokens.expiry_date ? Math.floor((tokens.expiry_date - Date.now()) / 1000) : 3600,
-        id: userInfo.data.id || '',
-        email: userInfo.data.email || '',
-        name: userInfo.data.name || '',
+        refreshToken: tokens.refresh_token || "", // Handle case where refresh token is not provided
+        expiresIn: tokens.expiry_date
+          ? Math.floor((tokens.expiry_date - Date.now()) / 1000)
+          : 3600,
+        id: userInfo.data.id || "",
+        email: userInfo.data.email || "",
+        name: userInfo.data.name || "",
         picture: userInfo.data.picture || undefined,
-        quota
+        quota,
       };
     } catch (error: any) {
       console.error(`❌ Google Drive authentication failed:`, error);
       throw new GoogleDriveError(
         `Authentication failed: ${error.message}`,
-        'AUTHENTICATION_ERROR',
-        error
+        "AUTHENTICATION_ERROR",
+        error,
       );
     }
   }
 
   async refreshToken(refreshToken: string): Promise<StorageAuthDetails> {
-    console.log(`🔄 GoogleDriveProvider.refreshToken called with refresh token: ${refreshToken ? 'Present' : 'Missing'}`);
+    console.log(
+      `🔄 GoogleDriveProvider.refreshToken called with refresh token: ${refreshToken ? "Present" : "Missing"}`,
+    );
 
     if (!this.isConfigured) {
       console.log(`❌ Google Drive provider not configured`);
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     if (!refreshToken) {
       console.log(`❌ No refresh token provided`);
-      throw new GoogleDriveError('No refresh token provided', 'MISSING_REFRESH_TOKEN');
+      throw new GoogleDriveError(
+        "No refresh token provided",
+        "MISSING_REFRESH_TOKEN",
+      );
     }
 
     // If refresh token is empty string, we can't refresh
-    if (refreshToken === '') {
+    if (refreshToken === "") {
       console.log(`❌ Empty refresh token provided, cannot refresh`);
-      throw new GoogleDriveError('No refresh token available for this integration. Please reconnect your Google Drive account.', 'MISSING_REFRESH_TOKEN');
+      throw new GoogleDriveError(
+        "No refresh token available for this integration. Please reconnect your Google Drive account.",
+        "MISSING_REFRESH_TOKEN",
+      );
     }
 
     try {
@@ -172,42 +216,51 @@ export class GoogleDriveProvider extends BaseStorageProvider {
 
       // Get user profile information with new access token
       this.oauth2Client.setCredentials(credentials);
-      const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
+      const oauth2 = google.oauth2({ version: "v2", auth: this.oauth2Client });
       const userInfo = await oauth2.userinfo.get();
       console.log(`✅ User info retrieved:`, userInfo.data);
 
       if (!userInfo.data) {
-        console.log(`❌ Failed to retrieve user information after token refresh`);
-        throw new GoogleDriveError('Failed to retrieve user information after token refresh', 'USER_INFO_ERROR');
+        console.log(
+          `❌ Failed to retrieve user information after token refresh`,
+        );
+        throw new GoogleDriveError(
+          "Failed to retrieve user information after token refresh",
+          "USER_INFO_ERROR",
+        );
       }
 
       // Get storage quota information
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
-      const about = await drive.about.get({ fields: 'user,storageQuota' });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
+      const about = await drive.about.get({ fields: "user,storageQuota" });
       console.log(`✅ Storage quota retrieved:`, about.data.storageQuota);
 
-      const quota = about.data.storageQuota ? {
-        used: parseInt(about.data.storageQuota.usage || '0'),
-        total: parseInt(about.data.storageQuota.limit || '0'),
-        unit: 'bytes' as const
-      } : undefined;
+      const quota = about.data.storageQuota
+        ? {
+            used: parseInt(about.data.storageQuota.usage || "0"),
+            total: parseInt(about.data.storageQuota.limit || "0"),
+            unit: "bytes" as const,
+          }
+        : undefined;
 
       const authDetails = {
         accessToken: credentials.access_token!,
         refreshToken: credentials.refresh_token || refreshToken,
-        expiresIn: credentials.expiry_date ? Math.floor((credentials.expiry_date - Date.now()) / 1000) : 3600,
-        id: userInfo.data.id || '',
-        email: userInfo.data.email || '',
-        name: userInfo.data.name || '',
+        expiresIn: credentials.expiry_date
+          ? Math.floor((credentials.expiry_date - Date.now()) / 1000)
+          : 3600,
+        id: userInfo.data.id || "",
+        email: userInfo.data.email || "",
+        name: userInfo.data.name || "",
         picture: userInfo.data.picture || undefined,
-        quota
+        quota,
       };
 
       console.log(`✅ Refresh token result:`, {
-        accessToken: authDetails.accessToken ? 'Present' : 'Missing',
-        refreshToken: authDetails.refreshToken ? 'Present' : 'Missing',
+        accessToken: authDetails.accessToken ? "Present" : "Missing",
+        refreshToken: authDetails.refreshToken ? "Present" : "Missing",
         expiresIn: authDetails.expiresIn,
-        email: authDetails.email
+        email: authDetails.email,
       });
 
       return authDetails;
@@ -215,8 +268,8 @@ export class GoogleDriveProvider extends BaseStorageProvider {
       console.error(`❌ Token refresh failed:`, error);
       throw new GoogleDriveError(
         `Token refresh failed: ${error.message}`,
-        'TOKEN_REFRESH_ERROR',
-        error
+        "TOKEN_REFRESH_ERROR",
+        error,
       );
     }
   }
@@ -224,20 +277,25 @@ export class GoogleDriveProvider extends BaseStorageProvider {
   async listFiles(
     accessToken: string,
     folderId?: string,
-    pageToken?: string
+    pageToken?: string,
   ): Promise<{
     files: StorageFile[];
     nextPageToken?: string;
   }> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     try {
-      console.log(`🔍 GoogleDriveProvider.listFiles called - Folder: ${folderId || 'root'}, PageToken: ${pageToken || 'none'}`);
+      console.log(
+        `🔍 GoogleDriveProvider.listFiles called - Folder: ${folderId || "root"}, PageToken: ${pageToken || "none"}`,
+      );
 
       this.oauth2Client.setCredentials({ access_token: accessToken });
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
 
       const query = folderId
         ? `'${folderId}' in parents and trashed = false`
@@ -247,144 +305,161 @@ export class GoogleDriveProvider extends BaseStorageProvider {
 
       const response = await drive.files.list({
         q: query,
-        fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink)',
+        fields:
+          "nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink)",
         pageSize: 100,
         pageToken: pageToken,
-        orderBy: 'folder,name,modifiedTime desc'
+        orderBy: "folder,name,modifiedTime desc",
       });
 
-      console.log(`✅ Google Drive API response - Total files in response: ${response.data.files?.length || 0}`);
+      console.log(
+        `✅ Google Drive API response - Total files in response: ${response.data.files?.length || 0}`,
+      );
 
       const files: StorageFile[] = (response.data.files || [])
-        .filter(file => {
+        .filter((file) => {
           const isValid = file.id && file.name;
           if (!isValid) {
-            console.log(`⚠️  Filtering out file due to missing properties:`, file);
+            console.log(
+              `⚠️  Filtering out file due to missing properties:`,
+              file,
+            );
           }
           return isValid;
         })
-        .map(file => {
+        .map((file) => {
           const mappedFile = {
             id: file.id!,
             name: file.name!,
-            mimeType: file.mimeType || 'application/octet-stream',
+            mimeType: file.mimeType || "application/octet-stream",
             size: file.size ? parseInt(file.size) : 0,
             modifiedTime: file.modifiedTime || new Date().toISOString(),
             thumbnailLink: file.thumbnailLink || undefined,
             webContentLink: file.webContentLink || undefined,
-            isFolder: file.mimeType === 'application/vnd.google-apps.folder',
-            path: `/${file.name}`
+            isFolder: file.mimeType === "application/vnd.google-apps.folder",
+            path: `/${file.name}`,
           };
 
-          console.log(`📁 Mapped file: ${mappedFile.name} (${mappedFile.mimeType}) - IsFolder: ${mappedFile.isFolder}`);
+          console.log(
+            `📁 Mapped file: ${mappedFile.name} (${mappedFile.mimeType}) - IsFolder: ${mappedFile.isFolder}`,
+          );
           return mappedFile;
         });
 
-      console.log(`✅ Transformed files for folder ${folderId || 'root'}: ${files.length}`);
+      console.log(
+        `✅ Transformed files for folder ${folderId || "root"}: ${files.length}`,
+      );
 
       return {
         files,
-        nextPageToken: response.data.nextPageToken || undefined
+        nextPageToken: response.data.nextPageToken || undefined,
       };
     } catch (error: any) {
       console.error(`❌ Google Drive listFiles error:`, error);
       throw new GoogleDriveError(
         `Failed to list files: ${error.message}`,
-        'LIST_FILES_ERROR',
-        error
+        "LIST_FILES_ERROR",
+        error,
       );
     }
   }
 
-  async getFile(
-    accessToken: string,
-    fileId: string
-  ): Promise<StorageFile> {
+  async getFile(accessToken: string, fileId: string): Promise<StorageFile> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     try {
       this.oauth2Client.setCredentials({ access_token: accessToken });
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
 
       const response = await drive.files.get({
         fileId: fileId,
-        fields: 'id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink'
+        fields:
+          "id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink",
       });
 
       const file = response.data;
 
       if (!file.id || !file.name) {
-        throw new GoogleDriveError('File not found or missing required properties', 'FILE_NOT_FOUND');
+        throw new GoogleDriveError(
+          "File not found or missing required properties",
+          "FILE_NOT_FOUND",
+        );
       }
 
       return {
         id: file.id,
         name: file.name,
-        mimeType: file.mimeType || 'application/octet-stream',
+        mimeType: file.mimeType || "application/octet-stream",
         size: file.size ? parseInt(file.size) : 0,
         modifiedTime: file.modifiedTime || new Date().toISOString(),
         thumbnailLink: file.thumbnailLink || undefined,
         webContentLink: file.webContentLink || undefined,
-        isFolder: file.mimeType === 'application/vnd.google-apps.folder'
+        isFolder: file.mimeType === "application/vnd.google-apps.folder",
       };
     } catch (error: any) {
       if (error.code === 404) {
-        throw new GoogleDriveError('File not found', 'FILE_NOT_FOUND', error);
+        throw new GoogleDriveError("File not found", "FILE_NOT_FOUND", error);
       }
       throw new GoogleDriveError(
         `Failed to get file: ${error.message}`,
-        'GET_FILE_ERROR',
-        error
+        "GET_FILE_ERROR",
+        error,
       );
     }
   }
 
   async downloadFile(
     accessToken: string,
-    fileId: string
+    fileId: string,
   ): Promise<{
     stream: Readable;
     filename: string;
     mimeType: string;
   }> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     try {
       this.oauth2Client.setCredentials({ access_token: accessToken });
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
 
       // Get file metadata first
       const metadata = await drive.files.get({
         fileId: fileId,
-        fields: 'name, mimeType'
+        fields: "name, mimeType",
       });
 
       // Download file content
       const response = await drive.files.get(
         {
           fileId: fileId,
-          alt: 'media'
+          alt: "media",
         },
-        { responseType: 'stream' }
+        { responseType: "stream" },
       );
 
       return {
         stream: response.data,
-        filename: metadata.data.name || 'unnamed-file',
-        mimeType: metadata.data.mimeType || 'application/octet-stream'
+        filename: metadata.data.name || "unnamed-file",
+        mimeType: metadata.data.mimeType || "application/octet-stream",
       };
     } catch (error: any) {
       if (error.code === 404) {
-        throw new GoogleDriveError('File not found', 'FILE_NOT_FOUND', error);
+        throw new GoogleDriveError("File not found", "FILE_NOT_FOUND", error);
       }
       throw new GoogleDriveError(
         `Failed to download file: ${error.message}`,
-        'DOWNLOAD_FILE_ERROR',
-        error
+        "DOWNLOAD_FILE_ERROR",
+        error,
       );
     }
   }
@@ -392,37 +467,43 @@ export class GoogleDriveProvider extends BaseStorageProvider {
   async getDownloadUrl(
     accessToken: string,
     fileId: string,
-    expiresIn: number = 3600
+    expiresIn: number = 3600,
   ): Promise<string> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     try {
       this.oauth2Client.setCredentials({ access_token: accessToken });
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
 
       // Generate a temporary access URL
       const response = await drive.files.get({
         fileId: fileId,
-        fields: 'webContentLink'
+        fields: "webContentLink",
       });
 
       const url = response.data.webContentLink;
 
       if (!url) {
-        throw new GoogleDriveError('Unable to generate download URL', 'DOWNLOAD_URL_ERROR');
+        throw new GoogleDriveError(
+          "Unable to generate download URL",
+          "DOWNLOAD_URL_ERROR",
+        );
       }
 
       return url;
     } catch (error: any) {
       if (error.code === 404) {
-        throw new GoogleDriveNotFoundError('File not found', error);
+        throw new GoogleDriveNotFoundError("File not found", error);
       }
       throw new GoogleDriveError(
         `Failed to get download URL: ${error.message}`,
-        'GET_DOWNLOAD_URL_ERROR',
-        error
+        "GET_DOWNLOAD_URL_ERROR",
+        error,
       );
     }
   }
@@ -432,61 +513,65 @@ export class GoogleDriveProvider extends BaseStorageProvider {
    */
   async searchFiles(
     accessToken: string,
-    options: SearchOptions
+    options: SearchOptions,
   ): Promise<{
     files: StorageFile[];
     nextPageToken?: string;
   }> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     try {
       this.oauth2Client.setCredentials({ access_token: accessToken });
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
 
       const query = buildSearchQuery({
         query: options.query,
         mimeType: options.mimeType,
-        trashed: false
+        trashed: false,
       });
 
       console.log(`🔍 Google Drive search query: ${query}`);
 
       const response = await drive.files.list({
         q: query,
-        fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink)',
+        fields:
+          "nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink)",
         pageSize: options.pageSize || 50,
         pageToken: options.pageToken,
-        orderBy: 'modifiedTime desc'
+        orderBy: "modifiedTime desc",
       });
 
       const files: StorageFile[] = (response.data.files || [])
-        .filter(file => file.id && file.name)
-        .map(file => ({
+        .filter((file) => file.id && file.name)
+        .map((file) => ({
           id: file.id!,
           name: file.name!,
-          mimeType: file.mimeType || 'application/octet-stream',
+          mimeType: file.mimeType || "application/octet-stream",
           size: file.size ? parseInt(file.size) : 0,
           modifiedTime: file.modifiedTime || new Date().toISOString(),
           thumbnailLink: file.thumbnailLink || undefined,
           webContentLink: file.webContentLink || undefined,
           isFolder: file.mimeType === GOOGLE_WORKSPACE_TYPES.FOLDER,
-          path: `/${file.name}`
+          path: `/${file.name}`,
         }));
 
       return {
         files,
-        nextPageToken: response.data.nextPageToken || undefined
+        nextPageToken: response.data.nextPageToken || undefined,
       };
     } catch (error: any) {
-      if (error.code === 403 && error.message?.includes('rate')) {
-        throw new GoogleDriveRateLimitError('Rate limit exceeded', error);
+      if (error.code === 403 && error.message?.includes("rate")) {
+        throw new GoogleDriveRateLimitError("Rate limit exceeded", error);
       }
       throw new GoogleDriveError(
         `Failed to search files: ${error.message}`,
-        'SEARCH_FILES_ERROR',
-        error
+        "SEARCH_FILES_ERROR",
+        error,
       );
     }
   }
@@ -497,25 +582,31 @@ export class GoogleDriveProvider extends BaseStorageProvider {
   async getThumbnail(
     accessToken: string,
     fileId: string,
-    size: number = 256
+    size: number = 256,
   ): Promise<string> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     try {
       this.oauth2Client.setCredentials({ access_token: accessToken });
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
 
       const response = await drive.files.get({
         fileId: fileId,
-        fields: 'thumbnailLink'
+        fields: "thumbnailLink",
       });
 
       let thumbnailUrl = response.data.thumbnailLink;
 
       if (!thumbnailUrl) {
-        throw new GoogleDriveError('No thumbnail available for this file', 'NO_THUMBNAIL');
+        throw new GoogleDriveError(
+          "No thumbnail available for this file",
+          "NO_THUMBNAIL",
+        );
       }
 
       // Modify thumbnail size parameter
@@ -524,12 +615,12 @@ export class GoogleDriveProvider extends BaseStorageProvider {
       return thumbnailUrl;
     } catch (error: any) {
       if (error.code === 404) {
-        throw new GoogleDriveNotFoundError('File not found', error);
+        throw new GoogleDriveNotFoundError("File not found", error);
       }
       throw new GoogleDriveError(
         `Failed to get thumbnail: ${error.message}`,
-        'GET_THUMBNAIL_ERROR',
-        error
+        "GET_THUMBNAIL_ERROR",
+        error,
       );
     }
   }
@@ -539,34 +630,38 @@ export class GoogleDriveProvider extends BaseStorageProvider {
    */
   async batchGetFiles(
     accessToken: string,
-    fileIds: string[]
+    fileIds: string[],
   ): Promise<StorageFile[]> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     try {
       this.oauth2Client.setCredentials({ access_token: accessToken });
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
 
       // Google Drive API doesn't have a native batch get, so we'll use Promise.all
       const filePromises = fileIds.map(async (fileId) => {
         try {
           const response = await drive.files.get({
             fileId: fileId,
-            fields: 'id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink'
+            fields:
+              "id, name, mimeType, size, modifiedTime, thumbnailLink, webContentLink",
           });
 
           const file = response.data;
           const storageFile: StorageFile = {
             id: file.id!,
             name: file.name!,
-            mimeType: file.mimeType || 'application/octet-stream',
+            mimeType: file.mimeType || "application/octet-stream",
             size: file.size ? parseInt(file.size) : 0,
             modifiedTime: file.modifiedTime || new Date().toISOString(),
             thumbnailLink: file.thumbnailLink ?? undefined,
             webContentLink: file.webContentLink ?? undefined,
-            isFolder: file.mimeType === GOOGLE_WORKSPACE_TYPES.FOLDER
+            isFolder: file.mimeType === GOOGLE_WORKSPACE_TYPES.FOLDER,
           };
           return storageFile;
         } catch (error) {
@@ -580,8 +675,8 @@ export class GoogleDriveProvider extends BaseStorageProvider {
     } catch (error: any) {
       throw new GoogleDriveError(
         `Failed to batch get files: ${error.message}`,
-        'BATCH_GET_FILES_ERROR',
-        error
+        "BATCH_GET_FILES_ERROR",
+        error,
       );
     }
   }
@@ -589,34 +684,35 @@ export class GoogleDriveProvider extends BaseStorageProvider {
   /**
    * List shared drives (Team Drives)
    */
-  async listSharedDrives(
-    accessToken: string
-  ): Promise<SharedDrive[]> {
+  async listSharedDrives(accessToken: string): Promise<SharedDrive[]> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     try {
       this.oauth2Client.setCredentials({ access_token: accessToken });
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
 
       const response = await drive.drives.list({
-        pageSize: 100
+        pageSize: 100,
       });
 
       const drives: SharedDrive[] = (response.data.drives || [])
-        .filter(drive => drive.id && drive.name)
-        .map(drive => ({
+        .filter((drive) => drive.id && drive.name)
+        .map((drive) => ({
           id: drive.id!,
-          name: drive.name!
+          name: drive.name!,
         }));
 
       return drives;
     } catch (error: any) {
       throw new GoogleDriveError(
         `Failed to list shared drives: ${error.message}`,
-        'LIST_SHARED_DRIVES_ERROR',
-        error
+        "LIST_SHARED_DRIVES_ERROR",
+        error,
       );
     }
   }
@@ -627,46 +723,49 @@ export class GoogleDriveProvider extends BaseStorageProvider {
   async exportFile(
     accessToken: string,
     fileId: string,
-    format?: string
+    format?: string,
   ): Promise<{
     stream: Readable;
     filename: string;
     mimeType: string;
   }> {
     if (!this.isConfigured) {
-      throw new GoogleDriveError('Google Drive provider not configured', 'NOT_CONFIGURED');
+      throw new GoogleDriveError(
+        "Google Drive provider not configured",
+        "NOT_CONFIGURED",
+      );
     }
 
     try {
       this.oauth2Client.setCredentials({ access_token: accessToken });
-      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+      const drive = google.drive({ version: "v3", auth: this.oauth2Client });
 
       // Get file metadata first
       const metadata = await drive.files.get({
         fileId: fileId,
-        fields: 'name, mimeType'
+        fields: "name, mimeType",
       });
 
-      const originalMimeType = metadata.data.mimeType || '';
-      const originalName = metadata.data.name || 'export';
+      const originalMimeType = metadata.data.mimeType || "";
+      const originalName = metadata.data.name || "export";
 
       // Check if it's a Google Workspace file
       if (!isGoogleWorkspaceFile(originalMimeType)) {
         throw new GoogleDriveError(
-          'File is not a Google Workspace file and cannot be exported',
-          'INVALID_FILE_TYPE'
+          "File is not a Google Workspace file and cannot be exported",
+          "INVALID_FILE_TYPE",
         );
       }
 
       // Get export format
       const exportFormat = format
-        ? { mimeType: format, extension: format.split('/')[1] || 'pdf' }
+        ? { mimeType: format, extension: format.split("/")[1] || "pdf" }
         : getDefaultExportFormat(originalMimeType);
 
       if (!exportFormat) {
         throw new GoogleDriveError(
-          'No export format available for this file type',
-          'NO_EXPORT_FORMAT'
+          "No export format available for this file type",
+          "NO_EXPORT_FORMAT",
         );
       }
 
@@ -674,28 +773,28 @@ export class GoogleDriveProvider extends BaseStorageProvider {
       const response = await drive.files.export(
         {
           fileId: fileId,
-          mimeType: exportFormat.mimeType
+          mimeType: exportFormat.mimeType,
         },
-        { responseType: 'stream' }
+        { responseType: "stream" },
       );
 
       // Generate filename with appropriate extension
-      const baseFilename = originalName.replace(/\.[^/.]+$/, '');
+      const baseFilename = originalName.replace(/\.[^/.]+$/, "");
       const filename = `${baseFilename}.${exportFormat.extension}`;
 
       return {
         stream: response.data,
         filename,
-        mimeType: exportFormat.mimeType
+        mimeType: exportFormat.mimeType,
       };
     } catch (error: any) {
       if (error.code === 404) {
-        throw new GoogleDriveNotFoundError('File not found', error);
+        throw new GoogleDriveNotFoundError("File not found", error);
       }
       throw new GoogleDriveError(
         `Failed to export file: ${error.message}`,
-        'EXPORT_FILE_ERROR',
-        error
+        "EXPORT_FILE_ERROR",
+        error,
       );
     }
   }

@@ -22,10 +22,10 @@ Create a `.env` file with the following variables:
 
 ```env
 # Server
-PORT=3001
+PORT=3000
 NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
-BACKEND_URL=http://localhost:3001
+BACKEND_URL=http://localhost:3000
 
 # Database (Cloud Postgres)
 DATABASE_URL=postgresql://user:password@host:5432/database
@@ -105,7 +105,7 @@ npm run db:migrate
 npm run dev
 ```
 
-The server will start at `http://localhost:3001`.
+The server will start at `http://localhost:3000`.
 
 ## Available Scripts
 
@@ -145,9 +145,9 @@ src/
 
 ### Health
 
-- `GET /health` - Full health check
-- `GET /health/live` - Liveness probe
-- `GET /health/ready` - Readiness probe
+- `GET http://localhost:3000/health` - Full health check
+- `GET http://localhost:3000/health/live` - Liveness probe
+- `GET http://localhost:3000/health/ready` - Readiness probe
 
 ### Integrations
 
@@ -204,7 +204,7 @@ src/
 
 ## Queue Dashboard
 
-Access the BullMQ dashboard at `http://localhost:3001/admin/queues` to monitor scheduled posts and job status.
+Access the BullMQ dashboard at `http://localhost:3000/admin/queues` to monitor scheduled posts and job status.
 
 ## License
 

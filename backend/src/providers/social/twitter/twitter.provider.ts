@@ -1,9 +1,15 @@
 // Twitter/X Provider Implementation
 
-import { TwitterApi, EUploadMimeType } from 'twitter-api-v2';
-import { SocialAbstract } from '../../base/social.abstract';
-import { SocialProvider, AuthTokenDetails, PostDetails, PostResponse, AnalyticsData } from '../../base/social.interface';
-import { mapTwitterError } from './twitter.errors';
+import { TwitterApi, EUploadMimeType } from "twitter-api-v2";
+import { SocialAbstract } from "../../base/social.abstract";
+import {
+  SocialProvider,
+  AuthTokenDetails,
+  PostDetails,
+  PostResponse,
+  AnalyticsData,
+} from "../../base/social.interface";
+import { mapTwitterError } from "./twitter.errors";
 import {
   TwitterPostSettings,
   TwitterTweetResponse,
@@ -11,7 +17,7 @@ import {
   TwitterThreadSettings,
   TwitterQuoteTweetSettings,
   TwitterMediaAltText,
-} from './twitter.types';
+} from "./twitter.types";
 import {
   validateTweetLength,
   validatePollOptions,
@@ -24,20 +30,20 @@ import {
   getMediaType,
   splitIntoThread,
   wait,
-} from './twitter.utils';
-import { makeId } from '../../../utils/helpers';
-import { rateLimiterService } from '../../../services/rate-limiter.service';
-import logger from '../../../utils/logger';
+} from "./twitter.utils";
+import { makeId } from "../../../utils/helpers";
+import { rateLimiterService } from "../../../services/rate-limiter.service";
+import logger from "../../../utils/logger";
 
 export class TwitterProvider extends SocialAbstract implements SocialProvider {
-  identifier = 'twitter';
-  name = 'X (Twitter)';
-  scopes = ['tweet.read', 'tweet.write', 'users.read', 'offline.access'];
+  identifier = "twitter";
+  name = "X (Twitter)";
+  scopes = ["tweet.read", "tweet.write", "users.read", "offline.access"];
   override maxConcurrentJob = 5;
   dto = {} as TwitterPostSettings;
-  editor = 'normal' as const;
+  editor = "normal" as const;
 
-  private readonly redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/integrations/twitter/callback`;
+  private readonly redirectUri = `${process.env.BACKEND_URL || "http://localhost:3000"}/api/integrations/twitter/callback`;
 
   maxLength(): number {
     return 280; // Twitter character limit
@@ -53,13 +59,13 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
     const codeChallenge = await generateCodeChallenge(codeVerifier);
 
     const params = new URLSearchParams({
-      response_type: 'code',
+      response_type: "code",
       client_id: process.env.TWITTER_CLIENT_ID!,
       redirect_uri: this.redirectUri,
-      scope: this.scopes.join(' '),
+      scope: this.scopes.join(" "),
       state,
       code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
+      code_challenge_method: "S256",
     });
 
     return {
@@ -81,7 +87,12 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
       });
 
       // Exchange code for tokens with PKCE
-      const { client: loggedClient, accessToken, refreshToken, expiresIn } = await client.loginWithOAuth2({
+      const {
+        client: loggedClient,
+        accessToken,
+        refreshToken,
+        expiresIn,
+      } = await client.loginWithOAuth2({
         code: params.code,
         codeVerifier: params.codeVerifier,
         redirectUri: this.redirectUri,
@@ -89,16 +100,16 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
 
       // Fetch user profile
       const user = await loggedClient.v2.me({
-        'user.fields': ['profile_image_url', 'username', 'name'],
+        "user.fields": ["profile_image_url", "username", "name"],
       });
 
       return {
         accessToken: accessToken!,
-        refreshToken: refreshToken || '',
+        refreshToken: refreshToken || "",
         expiresIn: expiresIn || 7200,
         id: user.data.id,
         name: user.data.name,
-        picture: user.data.profile_image_url || '',
+        picture: user.data.profile_image_url || "",
         username: user.data.username,
       };
     } catch (error: any) {
@@ -121,12 +132,16 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
       });
 
       // Refresh access token
-      const { client: refreshedClient, accessToken, refreshToken: newRefreshToken, expiresIn } =
-        await client.refreshOAuth2Token(refresh_token);
+      const {
+        client: refreshedClient,
+        accessToken,
+        refreshToken: newRefreshToken,
+        expiresIn,
+      } = await client.refreshOAuth2Token(refresh_token);
 
       // Fetch updated user profile
       const user = await refreshedClient.v2.me({
-        'user.fields': ['profile_image_url', 'username', 'name'],
+        "user.fields": ["profile_image_url", "username", "name"],
       });
 
       return {
@@ -135,7 +150,7 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
         expiresIn: expiresIn || 7200,
         id: user.data.id,
         name: user.data.name,
-        picture: user.data.profile_image_url || '',
+        picture: user.data.profile_image_url || "",
         username: user.data.username,
       };
     } catch (error: any) {
@@ -154,30 +169,34 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
     id: string,
     accessToken: string,
     postDetails: PostDetails[],
-    integration: any
+    integration: any,
   ): Promise<PostResponse[]> {
     const postDetail = postDetails[0];
     const settings = postDetail.settings as TwitterPostSettings;
 
     // Validate tweet length
     if (!validateTweetLength(settings.text)) {
-      throw new Error('Tweet text must be between 1 and 280 characters');
+      throw new Error("Tweet text must be between 1 and 280 characters");
     }
 
     // Validate poll if present
     if (settings.poll) {
       if (!validatePollOptions(settings.poll.options)) {
-        throw new Error('Poll must have 2-4 options, each max 25 characters');
+        throw new Error("Poll must have 2-4 options, each max 25 characters");
       }
       if (!validatePollDuration(settings.poll.duration_minutes)) {
-        throw new Error('Poll duration must be between 5 minutes and 7 days');
+        throw new Error("Poll duration must be between 5 minutes and 7 days");
       }
     }
 
     try {
       // Check rate limit
-      await rateLimiterService.waitForRateLimit('twitter', id, 'tweets');
-      logger.info('Posting tweet to Twitter', { id, textLength: settings.text.length, hasMedia: (postDetail.media?.length || 0) > 0 });
+      await rateLimiterService.waitForRateLimit("twitter", id, "tweets");
+      logger.info("Posting tweet to Twitter", {
+        id,
+        textLength: settings.text.length,
+        hasMedia: (postDetail.media?.length || 0) > 0,
+      });
 
       const client = new TwitterApi(accessToken);
 
@@ -187,13 +206,22 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
       if (postDetail.media && postDetail.media.length > 0) {
         const mediaType = getMediaType(postDetail.media[0].path);
 
-        if (mediaType !== 'unknown' && !validateMediaCount(postDetail.media.length, mediaType)) {
-          throw new Error('Twitter supports max 4 images or 1 video/GIF per tweet');
+        if (
+          mediaType !== "unknown" &&
+          !validateMediaCount(postDetail.media.length, mediaType)
+        ) {
+          throw new Error(
+            "Twitter supports max 4 images or 1 video/GIF per tweet",
+          );
         }
 
         for (const media of postDetail.media) {
-          const actualMediaType = mediaType === 'unknown' ? 'image' : mediaType;
-          const mediaId = await this.uploadMedia(client, media.path, actualMediaType);
+          const actualMediaType = mediaType === "unknown" ? "image" : mediaType;
+          const mediaId = await this.uploadMedia(
+            client,
+            media.path,
+            actualMediaType,
+          );
           mediaIds.push(mediaId);
         }
       }
@@ -228,12 +256,14 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
 
       const tweet = await client.v2.tweet(tweetData);
 
-      return [{
-        id: postDetail.id,
-        postId: tweet.data.id,
-        releaseURL: `https://twitter.com/${id}/status/${tweet.data.id}`,
-        status: 'success',
-      }];
+      return [
+        {
+          id: postDetail.id,
+          postId: tweet.data.id,
+          releaseURL: `https://twitter.com/${id}/status/${tweet.data.id}`,
+          status: "success",
+        },
+      ];
     } catch (error: any) {
       const errorBody = error.data ? JSON.stringify(error.data) : error.message;
       const mappedError = this.handleErrors(errorBody, error.code);
@@ -249,13 +279,13 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
   private async uploadMedia(
     client: TwitterApi,
     filePath: string,
-    mediaType: 'image' | 'video' | 'gif'
+    mediaType: "image" | "video" | "gif",
   ): Promise<string> {
     let mimeType: EUploadMimeType;
 
-    if (mediaType === 'image') {
+    if (mediaType === "image") {
       mimeType = EUploadMimeType.Jpeg;
-    } else if (mediaType === 'video') {
+    } else if (mediaType === "video") {
       mimeType = EUploadMimeType.Mp4;
     } else {
       mimeType = EUploadMimeType.Gif;
@@ -268,7 +298,7 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
   async analytics(
     id: string,
     accessToken: string,
-    date: number
+    date: number,
   ): Promise<AnalyticsData[]> {
     try {
       const client = new TwitterApi(accessToken);
@@ -280,7 +310,7 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
       const timeline = await client.v2.userTimeline(id, {
         start_time: startDate.toISOString(),
         end_time: endDate.toISOString(),
-        'tweet.fields': ['public_metrics', 'created_at'],
+        "tweet.fields": ["public_metrics", "created_at"],
         max_results: 100,
       });
 
@@ -306,28 +336,31 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
           metrics.reply_count,
           metrics.retweet_count,
           metrics.quote_count || 0,
-          metrics.impression_count || 1
+          metrics.impression_count || 1,
         );
         engagementData.push({ date, total: engagement });
       }
 
       return [
-        { label: 'Impressions', data: impressionsData },
-        { label: 'Likes', data: likesData },
-        { label: 'Replies', data: repliesData },
-        { label: 'Retweets', data: retweetsData },
-        { label: 'Quotes', data: quotesData },
-        { label: 'Engagement Rate (%)', data: engagementData },
+        { label: "Impressions", data: impressionsData },
+        { label: "Likes", data: likesData },
+        { label: "Replies", data: repliesData },
+        { label: "Retweets", data: retweetsData },
+        { label: "Quotes", data: quotesData },
+        { label: "Engagement Rate (%)", data: engagementData },
       ];
     } catch (error: any) {
-      console.error('Twitter analytics error:', error);
+      console.error("Twitter analytics error:", error);
       // Return empty array on error as per requirements
       return [];
     }
   }
 
-  public override handleErrors(body: string, statusCode?: number):
-    | { type: 'refresh-token' | 'bad-body' | 'retry'; value: string }
+  public override handleErrors(
+    body: string,
+    statusCode?: number,
+  ):
+    | { type: "refresh-token" | "bad-body" | "retry"; value: string }
     | undefined {
     return mapTwitterError(body, statusCode);
   }
@@ -339,10 +372,13 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
   async postThread(
     id: string,
     accessToken: string,
-    settings: TwitterThreadSettings
+    settings: TwitterThreadSettings,
   ): Promise<string[]> {
-    await rateLimiterService.waitForRateLimit('twitter', id, 'tweets');
-    logger.info('Posting thread to Twitter', { id, tweetCount: settings.tweets.length });
+    await rateLimiterService.waitForRateLimit("twitter", id, "tweets");
+    logger.info("Posting thread to Twitter", {
+      id,
+      tweetCount: settings.tweets.length,
+    });
 
     const client = new TwitterApi(accessToken);
     const tweetIds: string[] = [];
@@ -380,7 +416,7 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
       }
     }
 
-    logger.info('Thread posted successfully', { id, tweetIds });
+    logger.info("Thread posted successfully", { id, tweetIds });
     return tweetIds;
   }
 
@@ -391,10 +427,13 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
   async quoteTweet(
     id: string,
     accessToken: string,
-    settings: TwitterQuoteTweetSettings
+    settings: TwitterQuoteTweetSettings,
   ): Promise<string> {
-    await rateLimiterService.waitForRateLimit('twitter', id, 'tweets');
-    logger.info('Posting quote tweet to Twitter', { id, quotedTweetId: settings.quotedTweetId });
+    await rateLimiterService.waitForRateLimit("twitter", id, "tweets");
+    logger.info("Posting quote tweet to Twitter", {
+      id,
+      quotedTweetId: settings.quotedTweetId,
+    });
 
     const client = new TwitterApi(accessToken);
 
@@ -409,7 +448,10 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
 
     const tweet = await client.v2.tweet(tweetData);
 
-    logger.info('Quote tweet posted successfully', { id, tweetId: tweet.data.id });
+    logger.info("Quote tweet posted successfully", {
+      id,
+      tweetId: tweet.data.id,
+    });
     return tweet.data.id;
   }
 
@@ -419,9 +461,9 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
    */
   async addMediaAltText(
     accessToken: string,
-    altTextData: TwitterMediaAltText[]
+    altTextData: TwitterMediaAltText[],
   ): Promise<void> {
-    logger.info('Adding alt text to media', { mediaCount: altTextData.length });
+    logger.info("Adding alt text to media", { mediaCount: altTextData.length });
 
     const client = new TwitterApi(accessToken);
 
@@ -431,6 +473,6 @@ export class TwitterProvider extends SocialAbstract implements SocialProvider {
       });
     }
 
-    logger.info('Alt text added successfully');
+    logger.info("Alt text added successfully");
   }
 }
