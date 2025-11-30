@@ -5,21 +5,8 @@
 
 /// <reference types="vite/client" />
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-
-// Get auth token from localStorage
-const getAuthToken = () => {
-  return localStorage.getItem('auth_token');
-};
-
-// Get auth headers
-const getAuthHeaders = (): Record<string, string> => {
-  const token = getAuthToken();
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  return {};
-};
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
 interface PlatformSpecificContent {
   content?: string;
@@ -47,15 +34,13 @@ class ApiClient {
 
   private getHeaders(): HeadersInit {
     return {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
+      "Content-Type": "application/json",
     };
   }
 
-  // Public methods for auth (no auth required)
   async post(endpoint: string, data: any) {
     return this.request(endpoint, {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify(data),
     });
   }
@@ -66,7 +51,7 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     console.log(`🔍 API request - URL: ${url}`);
@@ -93,36 +78,40 @@ class ApiClient {
       }
 
       const result = response.json();
-      result.then(data => {
-        console.log(`✅ API response data:`, data);
-      }).catch(err => {
-        console.error(`❌ Error parsing API response:`, err);
-      });
+      result
+        .then((data) => {
+          console.log(`✅ API response data:`, data);
+        })
+        .catch((err) => {
+          console.error(`❌ Error parsing API response:`, err);
+        });
 
       return result;
     } catch (error) {
-      console.error('❌ API request failed:', error);
+      console.error("❌ API request failed:", error);
       throw error;
     }
   }
 
   // Integration endpoints
   async getIntegrationTypes() {
-    return this.request<{ social: IntegrationType[] }>('/integrations/types');
+    return this.request<{ social: IntegrationType[] }>("/integrations/types");
   }
 
   async getIntegrations() {
-    return this.request<Integration[]>('/integrations');
+    return this.request<Integration[]>("/integrations");
   }
 
   async getAuthUrl(provider: string) {
     try {
       return this.request<{ url: string; state: string; provider: string }>(
-        `/integrations/${provider}/auth-url`
+        `/integrations/${provider}/auth-url`,
       );
     } catch (error: any) {
-      if (error.message?.includes('Provider not found')) {
-        throw new Error(`${provider} integration is coming soon! Only Instagram is available right now.`);
+      if (error.message?.includes("Provider not found")) {
+        throw new Error(
+          `${provider} integration is coming soon! Only Instagram is available right now.`,
+        );
       }
       throw error;
     }
@@ -130,35 +119,35 @@ class ApiClient {
 
   async handleOAuthCallback(provider: string, code: string, state: string) {
     return this.request<Integration>(`/integrations/${provider}/callback`, {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify({ code, state }),
     });
   }
 
   async deleteIntegration(id: string) {
     return this.request(`/integrations/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
   async toggleIntegration(id: string, disabled: boolean) {
     return this.request<Integration>(`/integrations/${id}/toggle`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify({ disabled }),
     });
   }
 
   // Post endpoints
   async createPost(data: CreatePostData) {
-    return this.request<Post>('/posts', {
-      method: 'POST',
+    return this.request<Post>("/posts", {
+      method: "POST",
       body: JSON.stringify(data),
     });
   }
 
   async createMultiPlatformPost(data: CreateMultiPlatformPostData) {
-    return this.request<Post[]>('/posts/multi-platform', {
-      method: 'POST',
+    return this.request<Post[]>("/posts/multi-platform", {
+      method: "POST",
       body: JSON.stringify(data),
     });
   }
@@ -166,13 +155,9 @@ class ApiClient {
   // Media upload
   async uploadMedia(formData: FormData) {
     const url = `${this.baseUrl}/media/upload`;
-    const token = localStorage.getItem('auth_token');
 
     const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      method: "POST",
       body: formData,
     });
 
@@ -188,15 +173,15 @@ class ApiClient {
 
   async getPosts(filters?: PostFilters) {
     const params = new URLSearchParams();
-    if (filters?.startDate) params.append('startDate', filters.startDate);
-    if (filters?.endDate) params.append('endDate', filters.endDate);
-    if (filters?.provider) params.append('provider', filters.provider);
-    if (filters?.state) params.append('state', filters.state);
-    if (filters?.limit) params.append('limit', filters.limit.toString());
-    if (filters?.offset) params.append('offset', filters.offset.toString());
+    if (filters?.startDate) params.append("startDate", filters.startDate);
+    if (filters?.endDate) params.append("endDate", filters.endDate);
+    if (filters?.provider) params.append("provider", filters.provider);
+    if (filters?.state) params.append("state", filters.state);
+    if (filters?.limit) params.append("limit", filters.limit.toString());
+    if (filters?.offset) params.append("offset", filters.offset.toString());
 
     const query = params.toString();
-    return this.request<Post[]>(`/posts${query ? `?${query}` : ''}`);
+    return this.request<Post[]>(`/posts${query ? `?${query}` : ""}`);
   }
 
   async getPost(id: string) {
@@ -205,28 +190,28 @@ class ApiClient {
 
   async updatePost(id: string, data: UpdatePostData) {
     return this.request<Post>(`/posts/${id}`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify(data),
     });
   }
 
   async reschedulePost(id: string, publishDate: string) {
     return this.request<Post>(`/posts/${id}/reschedule`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify({ publishDate }),
     });
   }
 
   async deletePost(id: string) {
     return this.request(`/posts/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
   // Analytics endpoints
   async getAnalytics(integrationId: string, days: number = 30) {
     return this.request<AnalyticsResponse>(
-      `/analytics/${integrationId}?days=${days}`
+      `/analytics/${integrationId}?days=${days}`,
     );
   }
 
@@ -237,119 +222,157 @@ class ApiClient {
     metrics?: string[];
   }) {
     const searchParams = new URLSearchParams();
-    if (params.startDate) searchParams.append('startDate', params.startDate);
-    if (params.endDate) searchParams.append('endDate', params.endDate);
-    if (params.platforms) searchParams.append('platforms', params.platforms.join(','));
-    if (params.metrics) searchParams.append('metrics', params.metrics.join(','));
+    if (params.startDate) searchParams.append("startDate", params.startDate);
+    if (params.endDate) searchParams.append("endDate", params.endDate);
+    if (params.platforms)
+      searchParams.append("platforms", params.platforms.join(","));
+    if (params.metrics)
+      searchParams.append("metrics", params.metrics.join(","));
 
     return this.request<AggregatedAnalyticsResponse>(
-      `/analytics/aggregated?${searchParams.toString()}`
+      `/analytics/aggregated?${searchParams.toString()}`,
     );
   }
 
   // Health check
   async healthCheck() {
     return this.request<{ status: string; timestamp: string; uptime: number }>(
-      '/health'
+      "/health",
     );
   }
 
   // Storage endpoints
   async getStorageProviders() {
-    return this.request<{ identifier: string; name: string }[]>('/storage/providers');
+    return this.request<{ identifier: string; name: string }[]>(
+      "/storage/providers",
+    );
   }
 
   async getStorageAuthUrl(provider: string) {
-    return this.request<{ url: string; state: string }>(`/storage/auth/${provider}`);
+    return this.request<{ url: string; state: string }>(
+      `/storage/auth/${provider}`,
+    );
   }
 
   async getStorageIntegrations() {
-    return this.request<StorageIntegration[]>('/storage/integrations');
+    return this.request<StorageIntegration[]>("/storage/integrations");
   }
 
   async deleteStorageIntegration(id: string) {
     return this.request(`/storage/integrations/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
-  async listStorageFiles(integrationId: string, folderId?: string, pageToken?: string) {
+  async listStorageFiles(
+    integrationId: string,
+    folderId?: string,
+    pageToken?: string,
+  ) {
     const params = new URLSearchParams();
-    if (folderId) params.append('folderId', folderId);
-    if (pageToken) params.append('pageToken', pageToken);
+    if (folderId) params.append("folderId", folderId);
+    if (pageToken) params.append("pageToken", pageToken);
 
     const query = params.toString();
-    console.log(`🔍 API call to list storage files - Integration: ${integrationId}, Folder: ${folderId || 'root'}, Query: ${query}`);
-
-    const result = this.request<{ files: StorageFile[]; nextPageToken?: string }>(
-      `/storage/${integrationId}/files${query ? `?${query}` : ''}`
+    console.log(
+      `🔍 API call to list storage files - Integration: ${integrationId}, Folder: ${folderId || "root"}, Query: ${query}`,
     );
 
-    result.then(response => {
-      console.log(`✅ API response - Files: ${response.files.length}, NextPageToken: ${response.nextPageToken}`);
-    }).catch(error => {
-      console.error(`❌ API error:`, error);
-    });
+    const result = this.request<{
+      files: StorageFile[];
+      nextPageToken?: string;
+    }>(`/storage/${integrationId}/files${query ? `?${query}` : ""}`);
+
+    result
+      .then((response) => {
+        console.log(
+          `✅ API response - Files: ${response.files.length}, NextPageToken: ${response.nextPageToken}`,
+        );
+      })
+      .catch((error) => {
+        console.error(`❌ API error:`, error);
+      });
 
     return result;
   }
 
   async getStorageDownloadUrl(integrationId: string, fileId: string) {
-    return this.request<{ url: string }>(`/storage/${integrationId}/download/${fileId}`);
+    return this.request<{ url: string }>(
+      `/storage/${integrationId}/download/${fileId}`,
+    );
   }
 
   async importStorageFile(integrationId: string, fileId: string) {
     return this.request<{ path: string; filename: string; mimeType: string }>(
       `/storage/${integrationId}/import/${fileId}`,
       {
-        method: 'POST',
-      }
+        method: "POST",
+      },
     );
   }
 
-  async searchStorageFiles(integrationId: string, query: string, options?: { mimeType?: string; pageSize?: number; pageToken?: string }) {
+  async searchStorageFiles(
+    integrationId: string,
+    query: string,
+    options?: { mimeType?: string; pageSize?: number; pageToken?: string },
+  ) {
     return this.request<{ files: StorageFile[]; nextPageToken?: string }>(
       `/storage/${integrationId}/search`,
       {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({ query, ...options }),
-      }
+      },
     );
   }
 
-  async getStorageThumbnail(integrationId: string, fileId: string, size?: number) {
+  async getStorageThumbnail(
+    integrationId: string,
+    fileId: string,
+    size?: number,
+  ) {
     const params = new URLSearchParams();
-    if (size) params.append('size', size.toString());
+    if (size) params.append("size", size.toString());
     const query = params.toString();
-    return this.request<{ url: string }>(`/storage/${integrationId}/thumbnail/${fileId}${query ? `?${query}` : ''}`);
+    return this.request<{ url: string }>(
+      `/storage/${integrationId}/thumbnail/${fileId}${query ? `?${query}` : ""}`,
+    );
   }
 
   async batchImportStorageFiles(integrationId: string, fileIds: string[]) {
-    return this.request<{ results: Array<{ fileId: string; success: boolean; result?: any; error?: string }> }>(
-      `/storage/${integrationId}/batch-import`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ fileIds }),
-      }
-    );
+    return this.request<{
+      results: Array<{
+        fileId: string;
+        success: boolean;
+        result?: any;
+        error?: string;
+      }>;
+    }>(`/storage/${integrationId}/batch-import`, {
+      method: "POST",
+      body: JSON.stringify({ fileIds }),
+    });
   }
 
   async listSharedDrives(integrationId: string) {
-    return this.request<{ drives: Array<{ id: string; name: string }> }>(`/storage/${integrationId}/shared-drives`);
+    return this.request<{ drives: Array<{ id: string; name: string }> }>(
+      `/storage/${integrationId}/shared-drives`,
+    );
   }
 
-  async exportStorageFile(integrationId: string, fileId: string, format?: string) {
-    // This endpoint returns a file stream, so we handle it differently if we want to trigger a download
-    // For now, we'll just return the response blob
-    const token = localStorage.getItem('auth_token');
-    const response = await fetch(`${this.baseUrl}/storage/${integrationId}/export/${fileId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  async exportStorageFile(
+    integrationId: string,
+    fileId: string,
+    format?: string,
+  ) {
+    const response = await fetch(
+      `${this.baseUrl}/storage/${integrationId}/export/${fileId}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ format }),
       },
-      body: JSON.stringify({ format }),
-    });
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to export file: ${response.statusText}`);
@@ -404,7 +427,7 @@ export interface Post {
   id: string;
   content: string;
   publishDate: string;
-  state: 'QUEUE' | 'PUBLISHED' | 'ERROR';
+  state: "QUEUE" | "PUBLISHED" | "ERROR";
   group?: string;
   releaseURL?: string;
   error?: string;

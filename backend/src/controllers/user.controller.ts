@@ -1,36 +1,97 @@
-import { Request, Response } from 'express';
-import { prisma } from '../database/prisma.client';
+import { Request, Response } from "express";
+import { db } from "../database/db";
+import { users } from "../database/schema";
+import { eq } from "drizzle-orm";
+
+// Default user ID for simplified operation (no auth)
+const DEFAULT_USER_ID = "default-user";
 
 export const userController = {
-    async updateProfile(req: Request, res: Response) {
-        try {
-            const userId = (req as any).user.id;
-            const { geminiApiKey } = req.body;
+  async updateProfile(req: Request, res: Response) {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const { geminiApiKey } = req.body;
 
-            const updatedUser = await prisma.user.update({
-                where: { id: userId },
-                data: { geminiApiKey },
-                select: { id: true, email: true, name: true, geminiApiKey: true }
-            });
+      // Check if user exists, if not create one
+      const existingUser = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
 
-            return res.json(updatedUser);
-        } catch (error) {
-            console.error('Update profile error:', error);
-            return res.status(500).json({ error: 'Failed to update profile' });
-        }
-    },
+      let updatedUser;
+      if (!existingUser) {
+        // Create default user if it doesn't exist
+        const [created] = await db
+          .insert(users)
+          .values({
+            id: userId,
+            email: "default@example.com",
+            name: "Default User",
+            geminiApiKey,
+          })
+          .returning({
+            id: users.id,
+            email: users.email,
+            name: users.name,
+            geminiApiKey: users.geminiApiKey,
+          });
+        updatedUser = created;
+      } else {
+        const [updated] = await db
+          .update(users)
+          .set({ geminiApiKey, updatedAt: new Date() })
+          .where(eq(users.id, userId))
+          .returning({
+            id: users.id,
+            email: users.email,
+            name: users.name,
+            geminiApiKey: users.geminiApiKey,
+          });
+        updatedUser = updated;
+      }
 
-    async getProfile(req: Request, res: Response) {
-        try {
-            const userId = (req as any).user.id;
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
-                select: { id: true, email: true, name: true, geminiApiKey: true }
-            });
-            return res.json(user);
-        } catch (error) {
-            console.error('Get profile error:', error);
-            return res.status(500).json({ error: 'Failed to fetch profile' });
-        }
+      return res.json(updatedUser);
+    } catch (error) {
+      console.error("Update profile error:", error);
+      return res.status(500).json({ error: "Failed to update profile" });
     }
+  },
+
+  async getProfile(req: Request, res: Response) {
+    try {
+      const userId = DEFAULT_USER_ID;
+
+      let user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: {
+          id: true,
+          email: true,
+          name: true,
+          geminiApiKey: true,
+        },
+      });
+
+      // Create default user if it doesn't exist
+      if (!user) {
+        const [created] = await db
+          .insert(users)
+          .values({
+            id: userId,
+            email: "default@example.com",
+            name: "Default User",
+          })
+          .returning({
+            id: users.id,
+            email: users.email,
+            name: users.name,
+            geminiApiKey: users.geminiApiKey,
+          });
+        user = created;
+      }
+
+      return res.json(user);
+    } catch (error) {
+      console.error("Get profile error:", error);
+      return res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  },
 };

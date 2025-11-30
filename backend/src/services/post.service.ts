@@ -1,9 +1,11 @@
-import { prisma } from '../database/prisma.client';
-import { queueService } from './queue.service';
-import { integrationManager } from '../providers/integration.manager';
-import { NotFoundError, ValidationError } from '../utils/errors';
-import { v4 as uuidv4 } from 'uuid';
-import { contentValidationService } from './content-validation.service';
+import { db } from "../database/db";
+import { posts, integrations } from "../database/schema";
+import { eq, and, isNull, gte, lte, sql, desc, asc } from "drizzle-orm";
+import { queueService } from "./queue.service";
+import { integrationManager } from "../providers/integration.manager";
+import { NotFoundError, ValidationError } from "../utils/errors";
+import { v4 as uuidv4 } from "uuid";
+import { contentValidationService } from "./content-validation.service";
 
 interface CreatePostData {
   integrationId: string;
@@ -18,7 +20,10 @@ interface CreateMultiPlatformPostData {
   content: string;
   publishDate: Date;
   settings?: any;
-  platformSpecificContent?: Record<string, { content?: string; settings?: any }>;
+  platformSpecificContent?: Record<
+    string,
+    { content?: string; settings?: any }
+  >;
 }
 
 interface PostFilters {
@@ -39,47 +44,45 @@ export class PostService {
   /**
    * Create and schedule a post
    */
-  async createPost(
-    userId: string,
-    data: CreatePostData
-  ) {
+  async createPost(userId: string, data: CreatePostData) {
     // Verify integration exists and belongs to user
-    const integration = await prisma.integration.findFirst({
-      where: {
-        id: data.integrationId,
-        userId,
-        deletedAt: null,
-      },
+    const integration = await db.query.integrations.findFirst({
+      where: and(
+        eq(integrations.id, data.integrationId),
+        eq(integrations.userId, userId),
+        isNull(integrations.deletedAt),
+      ),
     });
 
     if (!integration) {
-      throw new NotFoundError('Integration not found');
+      throw new NotFoundError("Integration not found");
     }
 
     if (integration.disabled) {
-      throw new ValidationError('Integration is disabled');
+      throw new ValidationError("Integration is disabled");
     }
 
-    // Get provider to validate content
     // Check if this is a storage integration - validation is only for social integrations
-    if (integration.type === 'storage') {
-      throw new ValidationError('Content validation is only available for social media accounts, not storage accounts');
+    if (integration.type === "storage") {
+      throw new ValidationError(
+        "Content validation is only available for social media accounts, not storage accounts",
+      );
     }
 
     const provider = integrationManager.getSocialIntegration(
-      integration.providerIdentifier
+      integration.providerIdentifier,
     );
 
     // Validate content length
     if (data.content.length > provider.maxLength()) {
       throw new ValidationError(
-        `Content exceeds maximum length of ${provider.maxLength()} characters`
+        `Content exceeds maximum length of ${provider.maxLength()} characters`,
       );
     }
 
     // Validate publish date is in future
     if (data.publishDate <= new Date()) {
-      throw new ValidationError('Publish date must be in the future');
+      throw new ValidationError("Publish date must be in the future");
     }
 
     // Generate group ID for multi-platform posts
@@ -89,7 +92,7 @@ export class PostService {
     console.log(`🔍 DEBUG createPost - Received data:`, {
       media: data.media,
       settings: data.settings,
-      integrationId: data.integrationId
+      integrationId: data.integrationId,
     });
 
     // Prepare settings with media
@@ -101,29 +104,24 @@ export class PostService {
     console.log(`📦 DEBUG merged settings:`, settings);
 
     // Create post
-    const post = await prisma.post.create({
-      data: {
+    const [post] = await db
+      .insert(posts)
+      .values({
         userId,
         integrationId: data.integrationId,
         content: data.content,
         publishDate: data.publishDate,
         group,
         settings: settings,
-        state: 'QUEUE',
-      },
-      include: {
-        integration: true,
-      },
-    });
+        state: "QUEUE",
+      })
+      .returning();
 
     // Schedule job
     const jobId = await queueService.addJob(post.id, data.publishDate);
 
     // Update post with job ID
-    await prisma.post.update({
-      where: { id: post.id },
-      data: { jobId },
-    });
+    await db.update(posts).set({ jobId }).where(eq(posts.id, post.id));
 
     console.log(`📝 Created post ${post.id} for ${integration.name}`);
 
@@ -145,48 +143,50 @@ export class PostService {
    */
   async createMultiPlatformPost(
     userId: string,
-    data: CreateMultiPlatformPostData
+    data: CreateMultiPlatformPostData,
   ) {
     // Validate content
     const validation = await contentValidationService.validateContent({
       defaultContent: data.content,
       integrationIds: data.integrationIds,
-      platformSpecificContent: data.platformSpecificContent
+      platformSpecificContent: data.platformSpecificContent,
     });
 
     if (!validation.isValid) {
-      throw new ValidationError(`Content validation failed: ${validation.errors.join(', ')}`);
+      throw new ValidationError(
+        `Content validation failed: ${validation.errors.join(", ")}`,
+      );
     }
 
     // Validate at least one integration
     if (!data.integrationIds || data.integrationIds.length === 0) {
-      throw new ValidationError('At least one integration must be selected');
+      throw new ValidationError("At least one integration must be selected");
     }
 
     // Verify all integrations exist and belong to user
-    const integrations = await prisma.integration.findMany({
-      where: {
-        id: { in: data.integrationIds },
-        userId,
-        deletedAt: null,
-      },
+    const integrationsList = await db.query.integrations.findMany({
+      where: and(
+        sql`${integrations.id} IN ${data.integrationIds}`,
+        eq(integrations.userId, userId),
+        isNull(integrations.deletedAt),
+      ),
     });
 
-    if (integrations.length !== data.integrationIds.length) {
-      throw new NotFoundError('One or more integrations not found');
+    if (integrationsList.length !== data.integrationIds.length) {
+      throw new NotFoundError("One or more integrations not found");
     }
 
     // Check for disabled integrations
-    const disabledIntegrations = integrations.filter(i => i.disabled);
+    const disabledIntegrations = integrationsList.filter((i) => i.disabled);
     if (disabledIntegrations.length > 0) {
       throw new ValidationError(
-        `The following integrations are disabled: ${disabledIntegrations.map(i => i.name).join(', ')}`
+        `The following integrations are disabled: ${disabledIntegrations.map((i) => i.name).join(", ")}`,
       );
     }
 
     // Validate publish date is in future
     if (data.publishDate <= new Date()) {
-      throw new ValidationError('Publish date must be in the future');
+      throw new ValidationError("Publish date must be in the future");
     }
 
     // Generate group UUID for related posts
@@ -195,9 +195,11 @@ export class PostService {
     // Create posts for each integration
     const createdPosts = [];
 
-    for (const integration of integrations) {
+    for (const integration of integrationsList) {
       // Get provider
-      const provider = integrationManager.getSocialIntegration(integration.providerIdentifier);
+      const provider = integrationManager.getSocialIntegration(
+        integration.providerIdentifier,
+      );
 
       // Get platform-specific content or use default
       const platformContent = data.platformSpecificContent?.[integration.id];
@@ -205,26 +207,24 @@ export class PostService {
       const postSettings = platformContent?.settings || data.settings;
 
       // Create post record
-      const post = await prisma.post.create({
-        data: {
+      const [post] = await db
+        .insert(posts)
+        .values({
           userId,
           integrationId: integration.id,
           content: postContent,
           publishDate: data.publishDate,
           settings: postSettings || null,
-          state: 'QUEUE',
+          state: "QUEUE",
           group: groupId,
-        },
-      });
+        })
+        .returning();
 
       // Add job to queue
       const jobId = await queueService.addJob(post.id, data.publishDate);
 
       // Update post with job ID
-      await prisma.post.update({
-        where: { id: post.id },
-        data: { jobId },
-      });
+      await db.update(posts).set({ jobId }).where(eq(posts.id, post.id));
 
       createdPosts.push({
         ...post,
@@ -248,40 +248,29 @@ export class PostService {
    * List posts with filters
    */
   async listPosts(userId: string, filters: PostFilters = {}) {
-    const where: any = {
-      userId,
-      deletedAt: null,
-    };
+    const conditions = [eq(posts.userId, userId), isNull(posts.deletedAt)];
 
-    if (filters.startDate || filters.endDate) {
-      where.publishDate = {};
-      if (filters.startDate) {
-        where.publishDate.gte = filters.startDate;
-      }
-      if (filters.endDate) {
-        where.publishDate.lte = filters.endDate;
-      }
+    if (filters.startDate) {
+      conditions.push(gte(posts.publishDate, filters.startDate));
     }
 
-    if (filters.providerIdentifier) {
-      where.integration = {
-        providerIdentifier: filters.providerIdentifier,
-      };
+    if (filters.endDate) {
+      conditions.push(lte(posts.publishDate, filters.endDate));
     }
 
     if (filters.state) {
-      where.state = filters.state;
+      conditions.push(eq(posts.state, filters.state as any));
     }
 
     if (filters.group) {
-      where.group = filters.group;
+      conditions.push(eq(posts.group, filters.group));
     }
 
-    const posts = await prisma.post.findMany({
-      where,
-      include: {
+    const results = await db.query.posts.findMany({
+      where: and(...conditions),
+      with: {
         integration: {
-          select: {
+          columns: {
             id: true,
             name: true,
             picture: true,
@@ -289,14 +278,20 @@ export class PostService {
           },
         },
       },
-      orderBy: {
-        publishDate: 'asc',
-      },
-      take: filters.limit || 100,
-      skip: filters.offset || 0,
+      orderBy: [asc(posts.publishDate)],
+      limit: filters.limit || 100,
+      offset: filters.offset || 0,
     });
 
-    return posts.map((post: any) => ({
+    // Filter by provider if needed (done in memory since it's a join)
+    let filteredResults = results;
+    if (filters.providerIdentifier) {
+      filteredResults = results.filter(
+        (p) => p.integration?.providerIdentifier === filters.providerIdentifier,
+      );
+    }
+
+    return filteredResults.map((post) => ({
       id: post.id,
       content: post.content,
       publishDate: post.publishDate,
@@ -315,19 +310,19 @@ export class PostService {
    * Get single post
    */
   async getPost(id: string, userId: string) {
-    const post = await prisma.post.findFirst({
-      where: {
-        id,
-        userId,
-        deletedAt: null,
-      },
-      include: {
+    const post = await db.query.posts.findFirst({
+      where: and(
+        eq(posts.id, id),
+        eq(posts.userId, userId),
+        isNull(posts.deletedAt),
+      ),
+      with: {
         integration: true,
       },
     });
 
     if (!post) {
-      throw new NotFoundError('Post not found');
+      throw new NotFoundError("Post not found");
     }
 
     return post;
@@ -339,39 +334,43 @@ export class PostService {
   async updatePost(
     id: string,
     userId: string,
-    data: { content?: string; settings?: any }
+    data: { content?: string; settings?: any },
   ) {
     const post = await this.getPost(id, userId);
 
-    if (post.state !== 'QUEUE') {
-      throw new ValidationError('Can only update posts in QUEUE state');
+    if (post.state !== "QUEUE") {
+      throw new ValidationError("Can only update posts in QUEUE state");
     }
 
     // Validate content length if provided
     if (data.content) {
       // Check if this is a storage integration - validation is only for social integrations
-      if (post.integration.type === 'storage') {
-        throw new ValidationError('Content validation is only available for social media accounts, not storage accounts');
+      if (post.integration.type === "storage") {
+        throw new ValidationError(
+          "Content validation is only available for social media accounts, not storage accounts",
+        );
       }
 
       const provider = integrationManager.getSocialIntegration(
-        post.integration.providerIdentifier
+        post.integration.providerIdentifier,
       );
 
       if (data.content.length > provider.maxLength()) {
         throw new ValidationError(
-          `Content exceeds maximum length of ${provider.maxLength()} characters`
+          `Content exceeds maximum length of ${provider.maxLength()} characters`,
         );
       }
     }
 
-    const updated = await prisma.post.update({
-      where: { id },
-      data: {
+    const [updated] = await db
+      .update(posts)
+      .set({
         ...(data.content && { content: data.content }),
         ...(data.settings && { settings: data.settings }),
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(posts.id, id))
+      .returning();
 
     console.log(`✏️  Updated post ${id}`);
 
@@ -381,19 +380,15 @@ export class PostService {
   /**
    * Reschedule post to new date
    */
-  async reschedulePost(
-    id: string,
-    userId: string,
-    newPublishDate: Date
-  ) {
+  async reschedulePost(id: string, userId: string, newPublishDate: Date) {
     const post = await this.getPost(id, userId);
 
-    if (post.state !== 'QUEUE') {
-      throw new ValidationError('Can only reschedule posts in QUEUE state');
+    if (post.state !== "QUEUE") {
+      throw new ValidationError("Can only reschedule posts in QUEUE state");
     }
 
     if (newPublishDate <= new Date()) {
-      throw new ValidationError('Publish date must be in the future');
+      throw new ValidationError("Publish date must be in the future");
     }
 
     // Remove old job
@@ -405,13 +400,14 @@ export class PostService {
     const jobId = await queueService.addJob(post.id, newPublishDate);
 
     // Update post
-    await prisma.post.update({
-      where: { id },
-      data: {
+    await db
+      .update(posts)
+      .set({
         publishDate: newPublishDate,
         jobId,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(posts.id, id));
 
     console.log(`📅 Rescheduled post ${id} to ${newPublishDate}`);
 
@@ -430,10 +426,10 @@ export class PostService {
     }
 
     // Soft delete post
-    await prisma.post.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
+    await db
+      .update(posts)
+      .set({ deletedAt: new Date() })
+      .where(eq(posts.id, id));
 
     console.log(`🗑️  Cancelled post ${id}`);
 
@@ -443,27 +439,26 @@ export class PostService {
   /**
    * Get posts count by date for calendar
    */
-  async getPostsCountByDate(
-    userId: string,
-    startDate: Date,
-    endDate: Date
-  ) {
-    const posts = await prisma.post.groupBy({
-      by: ['publishDate'],
-      where: {
-        userId,
-        deletedAt: null,
-        publishDate: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      _count: true,
-    });
+  async getPostsCountByDate(userId: string, startDate: Date, endDate: Date) {
+    const results = await db
+      .select({
+        publishDate: posts.publishDate,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(posts)
+      .where(
+        and(
+          eq(posts.userId, userId),
+          isNull(posts.deletedAt),
+          gte(posts.publishDate, startDate),
+          lte(posts.publishDate, endDate),
+        ),
+      )
+      .groupBy(posts.publishDate);
 
-    return posts.map((p: any) => ({
-      date: p.publishDate.toISOString().split('T')[0],
-      count: p._count,
+    return results.map((p) => ({
+      date: p.publishDate.toISOString().split("T")[0],
+      count: p.count,
     }));
   }
 
@@ -471,15 +466,15 @@ export class PostService {
    * Get all posts in a group
    */
   async getPostsByGroup(userId: string, groupId: string) {
-    const posts = await prisma.post.findMany({
-      where: {
-        userId,
-        group: groupId,
-        deletedAt: null,
-      },
-      include: {
+    const results = await db.query.posts.findMany({
+      where: and(
+        eq(posts.userId, userId),
+        eq(posts.group, groupId),
+        isNull(posts.deletedAt),
+      ),
+      with: {
         integration: {
-          select: {
+          columns: {
             id: true,
             name: true,
             providerIdentifier: true,
@@ -487,12 +482,10 @@ export class PostService {
           },
         },
       },
-      orderBy: {
-        createdAt: 'asc',
-      },
+      orderBy: [asc(posts.createdAt)],
     });
 
-    return posts;
+    return results;
   }
 
   /**
@@ -505,47 +498,51 @@ export class PostService {
       content?: string;
       publishDate?: Date;
       settings?: any;
-    }
+    },
   ) {
     // Get all posts in group
-    const posts = await prisma.post.findMany({
-      where: {
-        userId,
-        group: groupId,
-        state: 'QUEUE',
-        deletedAt: null,
-      },
+    const groupPosts = await db.query.posts.findMany({
+      where: and(
+        eq(posts.userId, userId),
+        eq(posts.group, groupId),
+        eq(posts.state, "QUEUE"),
+        isNull(posts.deletedAt),
+      ),
     });
 
-    if (posts.length === 0) {
-      throw new NotFoundError('No posts found in group or all posts already published');
+    if (groupPosts.length === 0) {
+      throw new NotFoundError(
+        "No posts found in group or all posts already published",
+      );
     }
 
     const updatedPosts = [];
 
-    for (const post of posts) {
+    for (const post of groupPosts) {
       // Remove old job if rescheduling
       if (updates.publishDate && post.jobId) {
         await queueService.removeJob(post.jobId);
       }
 
       // Update post
-      const updated = await prisma.post.update({
-        where: { id: post.id },
-        data: {
+      const [updated] = await db
+        .update(posts)
+        .set({
           content: updates.content || post.content,
           publishDate: updates.publishDate || post.publishDate,
           settings: updates.settings || post.settings,
-        },
-      });
+          updatedAt: new Date(),
+        })
+        .where(eq(posts.id, post.id))
+        .returning();
 
       // Add new job if rescheduling
       if (updates.publishDate) {
-        const jobId = await queueService.addJob(updated.id, updates.publishDate);
-        await prisma.post.update({
-          where: { id: updated.id },
-          data: { jobId },
-        });
+        const jobId = await queueService.addJob(
+          updated.id,
+          updates.publishDate,
+        );
+        await db.update(posts).set({ jobId }).where(eq(posts.id, updated.id));
       }
 
       updatedPosts.push(updated);
@@ -559,33 +556,35 @@ export class PostService {
    */
   async cancelGroupPosts(userId: string, groupId: string) {
     // Get all posts in group
-    const posts = await prisma.post.findMany({
-      where: {
-        userId,
-        group: groupId,
-        state: 'QUEUE',
-        deletedAt: null,
-      },
+    const groupPosts = await db.query.posts.findMany({
+      where: and(
+        eq(posts.userId, userId),
+        eq(posts.group, groupId),
+        eq(posts.state, "QUEUE"),
+        isNull(posts.deletedAt),
+      ),
     });
 
-    if (posts.length === 0) {
-      throw new NotFoundError('No posts found in group or all posts already published');
+    if (groupPosts.length === 0) {
+      throw new NotFoundError(
+        "No posts found in group or all posts already published",
+      );
     }
 
-    for (const post of posts) {
+    for (const post of groupPosts) {
       // Remove job from queue
       if (post.jobId) {
         await queueService.removeJob(post.jobId);
       }
 
       // Soft delete post
-      await prisma.post.update({
-        where: { id: post.id },
-        data: { deletedAt: new Date() },
-      });
+      await db
+        .update(posts)
+        .set({ deletedAt: new Date() })
+        .where(eq(posts.id, post.id));
     }
 
-    return { cancelled: posts.length };
+    return { cancelled: groupPosts.length };
   }
 }
 

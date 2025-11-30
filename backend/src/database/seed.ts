@@ -1,41 +1,39 @@
-import { prisma } from './prisma.client';
+import { config } from "dotenv";
+config();
 
-/**
- * Seed database with demo user
- * Run with: npx ts-node src/database/seed.ts
- */
+import { db, pool } from "./db";
+import { users } from "./schema";
+
 async function seed() {
-  console.log('🌱 Seeding database...\n');
+  console.log("🌱 Seeding database...");
 
   try {
-    // Create demo user if it doesn't exist
-    const demoUser = await prisma.user.upsert({
-      where: { email: 'demo@loopdesk.com' },
-      update: {},
-      create: {
-        id: 'demo-user-123',
-        email: 'demo@loopdesk.com',
-        name: 'Demo User',
+    // Create default user
+    const result = await db
+      .insert(users)
+      .values({
+        id: "default-user",
+        email: "default@example.com",
+        name: "Default User",
         timezone: 0,
-      },
-    });
+      })
+      .onConflictDoNothing()
+      .returning();
 
-    console.log('✅ Demo user created/updated:');
-    console.log(`   ID: ${demoUser.id}`);
-    console.log(`   Email: ${demoUser.email}`);
-    console.log(`   Name: ${demoUser.name}\n`);
+    if (result.length > 0) {
+      console.log("✅ Default user created:", result[0].id);
+    } else {
+      console.log("✅ Default user already exists");
+    }
 
-    console.log('🎉 Seeding complete!');
+    console.log("🌱 Seeding complete!");
   } catch (error) {
-    console.error('❌ Seeding failed:', error);
-    throw error;
+    console.error("❌ Seeding failed:", error);
+    process.exit(1);
   } finally {
-    await prisma.$disconnect();
+    await pool.end();
+    process.exit(0);
   }
 }
 
-seed()
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+seed();

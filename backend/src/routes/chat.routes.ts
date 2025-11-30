@@ -1,17 +1,16 @@
-import { Router } from 'express';
-import { chatController } from '../controllers/chat.controller';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { Router } from "express";
+import { chatController } from "../controllers/chat.controller";
 
 const router = Router();
 
 // Streaming chat endpoint (existing)
-router.post('/', authMiddleware, chatController.handleChat);
+router.post("/", chatController.handleChat);
 
 // Conversation management endpoints
-router.get('/conversations', authMiddleware, chatController.getConversations);
-router.post('/conversations', authMiddleware, chatController.createConversation);
-router.get('/conversations/:id', authMiddleware, chatController.getConversation);
-router.patch('/conversations/:id', authMiddleware, chatController.updateConversation);
-router.delete('/conversations/:id', authMiddleware, chatController.deleteConversation);
+router.get("/conversations", chatController.getConversations);
+router.post("/conversations", chatController.createConversation);
+router.get("/conversations/:id", chatController.getConversation);
+router.patch("/conversations/:id", chatController.updateConversation);
+router.delete("/conversations/:id", chatController.deleteConversation);
 
 export const chatRoutes = router;

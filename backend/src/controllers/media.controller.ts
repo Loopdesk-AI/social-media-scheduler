@@ -1,7 +1,8 @@
-// Media controller
+import { Request, Response, NextFunction } from "express";
+import { mediaService } from "../services/media.service";
 
-import { Request, Response, NextFunction } from 'express';
-import { mediaService } from '../services/media.service';
+// Default user ID for simplified operation (no auth)
+const DEFAULT_USER_ID = "default-user";
 
 export class MediaController {
   /**
@@ -9,11 +10,11 @@ export class MediaController {
    */
   uploadMedia = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user!.id; // Fix: Use user ID instead of organizationId
+      const userId = DEFAULT_USER_ID;
       const file = req.file;
 
       if (!file) {
-        return res.status(400).json({ error: 'No file provided' });
+        return res.status(400).json({ error: "No file provided" });
       }
 
       const media = await mediaService.uploadMedia(userId, file);
@@ -29,11 +30,11 @@ export class MediaController {
    */
   listMedia = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user!.id; // Fix: Use user ID instead of organizationId
+      const userId = DEFAULT_USER_ID;
       const { type, limit, offset } = req.query;
 
       const media = await mediaService.listMedia(userId, {
-        type: type as 'image' | 'video' | undefined,
+        type: type as "image" | "video" | undefined,
         limit: limit ? parseInt(limit as string) : undefined,
         offset: offset ? parseInt(offset as string) : undefined,
       });
@@ -49,7 +50,7 @@ export class MediaController {
    */
   getMedia = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user!.id; // Fix: Use user ID instead of organizationId
+      const userId = DEFAULT_USER_ID;
       const { id } = req.params;
 
       const media = await mediaService.getMedia(id, userId);
@@ -65,7 +66,7 @@ export class MediaController {
    */
   deleteMedia = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user!.id; // Fix: Use user ID instead of organizationId
+      const userId = DEFAULT_USER_ID;
       const { id } = req.params;
 
       await mediaService.deleteMedia(id, userId);

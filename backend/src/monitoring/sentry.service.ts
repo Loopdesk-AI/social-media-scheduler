@@ -1,108 +1,126 @@
-import * as Sentry from '@sentry/node';
-import { nodeProfilingIntegration } from '@sentry/profiling-node';
-import { Express } from 'express';
+import logger from '../utils/logger';
 
 /**
- * Sentry Error Tracking Service
- * Monitors and reports errors to Sentry
+ * Simplified Sentry Service Stub
+ *
+ * This is a lightweight replacement for the Sentry SDK.
+ * It logs errors using the application's logger instead of sending them to Sentry.
+ *
+ * To enable real Sentry integration, install @sentry/node and update this file.
  */
-export class SentryService {
-  private initialized = false;
+class SentryService {
+  private enabled: boolean = false;
+
+  constructor() {
+    // Check if Sentry DSN is configured
+    const dsn = process.env.SENTRY_DSN;
+    if (dsn) {
+      logger.info('Sentry DSN configured but SDK not installed. Using local error logging.');
+    }
+    this.enabled = false;
+  }
 
   /**
-   * Initialize Sentry
+   * Initialize Sentry (no-op in stub version)
    */
-  init(app: Express): void {
-    // Only initialize if DSN is provided
-    if (!process.env.SENTRY_DSN) {
-      console.log('⚠️  Sentry DSN not configured, error tracking disabled');
-      return;
-    }
+  init(): void {
+    logger.info('Sentry service initialized (stub mode - using local logging)');
+  }
 
-    Sentry.init({
-      dsn: process.env.SENTRY_DSN,
-      environment: process.env.NODE_ENV || 'development',
-      integrations: [
-        // Enable profiling
-        nodeProfilingIntegration(),
-      ],
-      // Performance Monitoring
-      tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-      // Profiling
-      profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-      // Release tracking
-      release: process.env.npm_package_version || '1.0.0',
+  /**
+   * Capture an exception
+   * In this stub version, it logs the error locally
+   */
+  captureException(error: Error, context?: Record<string, any>): string {
+    const errorId = this.generateErrorId();
+
+    logger.error('Captured exception:', {
+      errorId,
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      context,
     });
 
-    // Setup Express error handlers
-    Sentry.setupExpressErrorHandler(app);
-
-    this.initialized = true;
-    console.log('✅ Sentry error tracking initialized');
+    return errorId;
   }
 
   /**
-   * Check if Sentry is initialized
+   * Capture a message
    */
-  isInitialized(): boolean {
-    return this.initialized;
-  }
+  captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info'): string {
+    const errorId = this.generateErrorId();
 
-  /**
-   * Capture exception manually
-   */
-  captureException(error: Error, context?: Record<string, any>): void {
-    if (!this.initialized) {
-      return;
-    }
-
-    Sentry.captureException(error, {
-      extra: context,
+    logger[level]('Captured message:', {
+      errorId,
+      message,
     });
-  }
 
-  /**
-   * Capture message manually
-   */
-  captureMessage(message: string, level: Sentry.SeverityLevel = 'info'): void {
-    if (!this.initialized) {
-      return;
-    }
-
-    Sentry.captureMessage(message, level);
+    return errorId;
   }
 
   /**
    * Set user context
    */
-  setUser(user: { id: string; email?: string; username?: string }): void {
-    if (!this.initialized) {
-      return;
+  setUser(user: { id: string; email?: string; username?: string } | null): void {
+    if (user) {
+      logger.debug('Set user context:', { userId: user.id });
+    } else {
+      logger.debug('Cleared user context');
     }
-
-    Sentry.setUser(user);
   }
 
   /**
-   * Add breadcrumb
+   * Set extra context
    */
-  addBreadcrumb(breadcrumb: Sentry.Breadcrumb): void {
-    if (!this.initialized) {
-      return;
-    }
-
-    Sentry.addBreadcrumb(breadcrumb);
+  setExtra(key: string, value: any): void {
+    logger.debug('Set extra context:', { key, value });
   }
 
   /**
-   * Close Sentry and flush events
+   * Set tag
    */
-  async close(): Promise<void> {
-    if (!this.initialized) {
-      return;
-    }
+  setTag(key: string, value: string): void {
+    logger.debug('Set tag:', { key, value });
+  }
 
-    await Sentry.close(2000);
+  /**
+   * Add breadcrumb for debugging
+   */
+  addBreadcrumb(breadcrumb: {
+    category?: string;
+    message?: string;
+    level?: 'debug' | 'info' | 'warning' | 'error';
+    data?: Record<string, any>;
+  }): void {
+    logger.debug('Breadcrumb:', breadcrumb);
+  }
+
+  /**
+   * Start a new transaction (no-op in stub)
+   */
+  startTransaction(context: { name: string; op?: string }): {
+    finish: () => void;
+    setStatus: (status: string) => void;
+  } {
+    return {
+      finish: () => {},
+      setStatus: () => {},
+    };
+  }
+
+  /**
+   * Generate a unique error ID for tracking
+   */
+  private generateErrorId(): string {
+    return `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  /**
+   * Check if Sentry is enabled
+   */
+  isEnabled(): boolean {
+    return this.enabled;
   }
 }
 

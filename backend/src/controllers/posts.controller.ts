@@ -1,7 +1,10 @@
-import { Request, Response, NextFunction } from 'express';
-import { PostService } from '../services/post.service';
+import { Request, Response, NextFunction } from "express";
+import { PostService } from "../services/post.service";
 
 const postService = new PostService();
+
+// Default user ID for simplified operation (no auth)
+const DEFAULT_USER_ID = "default-user";
 
 export class PostsController {
   /**
@@ -10,7 +13,7 @@ export class PostsController {
    */
   async createPost(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const { integrationId, content, publishDate, settings, media } = req.body;
 
       const post = await postService.createPost(userId, {
@@ -33,13 +36,23 @@ export class PostsController {
    */
   async listPosts(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
-      const { startDate, endDate, providerIdentifier, state, group, limit, offset } = req.query;
+      const userId = DEFAULT_USER_ID;
+      const {
+        startDate,
+        endDate,
+        providerIdentifier,
+        state,
+        group,
+        limit,
+        offset,
+      } = req.query;
 
       const posts = await postService.listPosts(userId, {
         ...(startDate && { startDate: new Date(startDate as string) }),
         ...(endDate && { endDate: new Date(endDate as string) }),
-        ...(providerIdentifier && { providerIdentifier: providerIdentifier as string }),
+        ...(providerIdentifier && {
+          providerIdentifier: providerIdentifier as string,
+        }),
         ...(state && { state: state as string }),
         ...(group && { group: group as string }),
         ...(limit && { limit: parseInt(limit as string) }),
@@ -59,7 +72,7 @@ export class PostsController {
   async getPost(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const post = await postService.getPost(id, userId);
       res.json(post);
     } catch (error) {
@@ -74,7 +87,7 @@ export class PostsController {
   async updatePost(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const { content, settings } = req.body;
 
       const post = await postService.updatePost(id, userId, {
@@ -95,13 +108,13 @@ export class PostsController {
   async reschedulePost(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const { publishDate } = req.body;
 
       const result = await postService.reschedulePost(
         id,
         userId,
-        new Date(publishDate)
+        new Date(publishDate),
       );
 
       res.json(result);
@@ -117,7 +130,7 @@ export class PostsController {
   async cancelPost(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const result = await postService.cancelPost(id, userId);
       res.json(result);
     } catch (error) {
@@ -131,13 +144,13 @@ export class PostsController {
    */
   async getPostsCounts(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const { startDate, endDate } = req.query;
 
       const counts = await postService.getPostsCountByDate(
         userId,
         new Date(startDate as string),
-        new Date(endDate as string)
+        new Date(endDate as string),
       );
 
       res.json(counts);
@@ -150,10 +163,20 @@ export class PostsController {
    * POST /api/posts/multi-platform
    * Create multi-platform post
    */
-  async createMultiPlatformPost(req: Request, res: Response, next: NextFunction) {
+  async createMultiPlatformPost(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
     try {
-      const userId = req.user!.id; // Fix: Use userId instead of organizationId
-      const { integrationIds, content, publishDate, settings, platformSpecificContent } = req.body;
+      const userId = DEFAULT_USER_ID;
+      const {
+        integrationIds,
+        content,
+        publishDate,
+        settings,
+        platformSpecificContent,
+      } = req.body;
 
       const result = await postService.createMultiPlatformPost(userId, {
         integrationIds,
@@ -175,7 +198,7 @@ export class PostsController {
    */
   async getPostsByGroup(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id; // Fix: Use userId instead of organizationId
+      const userId = DEFAULT_USER_ID;
       const { groupId } = req.params;
 
       const posts = await postService.getPostsByGroup(userId, groupId);
@@ -192,7 +215,7 @@ export class PostsController {
    */
   async updateGroupPosts(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id; // Fix: Use userId instead of organizationId
+      const userId = DEFAULT_USER_ID;
       const { groupId } = req.params;
       const { content, publishDate, settings } = req.body;
 
@@ -214,7 +237,7 @@ export class PostsController {
    */
   async cancelGroupPosts(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id; // Fix: Use userId instead of organizationId
+      const userId = DEFAULT_USER_ID;
       const { groupId } = req.params;
 
       const result = await postService.cancelGroupPosts(userId, groupId);

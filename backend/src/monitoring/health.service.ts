@@ -1,9 +1,9 @@
-import { prisma } from '../database/prisma.client';
-import { queueService } from '../services/queue.service';
-import Redis from 'ioredis';
+import { pool } from "../database/db";
+import { queueService } from "../services/queue.service";
+import Redis from "ioredis";
 
 export interface HealthStatus {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: "healthy" | "degraded" | "unhealthy";
   timestamp: string;
   uptime: number;
   version: string;
@@ -15,7 +15,7 @@ export interface HealthStatus {
 }
 
 export interface ServiceHealth {
-  status: 'up' | 'down';
+  status: "up" | "down";
   responseTime?: number;
   details?: any;
 }
@@ -28,10 +28,13 @@ export class HealthService {
   private redis: Redis;
 
   constructor() {
+    // Connect to cloud-hosted Redis
     this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
+      host: process.env.REDIS_HOST || "localhost",
+      port: parseInt(process.env.REDIS_PORT || "6379"),
+      password: process.env.REDIS_PASSWORD || undefined,
       lazyConnect: true,
+      tls: process.env.REDIS_TLS === "true" ? {} : undefined,
     });
   }
 
@@ -41,16 +44,16 @@ export class HealthService {
   async checkDatabase(): Promise<ServiceHealth> {
     const start = Date.now();
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      await pool.query("SELECT 1");
       return {
-        status: 'up',
+        status: "up",
         responseTime: Date.now() - start,
       };
     } catch (error) {
       return {
-        status: 'down',
+        status: "down",
         responseTime: Date.now() - start,
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -63,14 +66,14 @@ export class HealthService {
     try {
       await this.redis.ping();
       return {
-        status: 'up',
+        status: "up",
         responseTime: Date.now() - start,
       };
     } catch (error) {
       return {
-        status: 'down',
+        status: "down",
         responseTime: Date.now() - start,
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -83,15 +86,15 @@ export class HealthService {
     try {
       const metrics = await queueService.getMetrics();
       return {
-        status: 'up',
+        status: "up",
         responseTime: Date.now() - start,
         details: metrics,
       };
     } catch (error) {
       return {
-        status: 'down',
+        status: "down",
         responseTime: Date.now() - start,
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -107,25 +110,25 @@ export class HealthService {
     ]);
 
     const services = { database, redis, queue };
-    
-    // Determine overall status
-    const allUp = Object.values(services).every((s) => s.status === 'up');
-    const anyDown = Object.values(services).some((s) => s.status === 'down');
 
-    let status: 'healthy' | 'degraded' | 'unhealthy';
+    // Determine overall status
+    const allUp = Object.values(services).every((s) => s.status === "up");
+    const anyDown = Object.values(services).some((s) => s.status === "down");
+
+    let status: "healthy" | "degraded" | "unhealthy";
     if (allUp) {
-      status = 'healthy';
+      status = "healthy";
     } else if (anyDown) {
-      status = 'unhealthy';
+      status = "unhealthy";
     } else {
-      status = 'degraded';
+      status = "degraded";
     }
 
     return {
       status,
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      version: process.env.npm_package_version || '1.0.0',
+      version: process.env.npm_package_version || "1.0.0",
       services,
     };
   }

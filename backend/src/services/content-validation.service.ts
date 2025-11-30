@@ -1,5 +1,7 @@
-import { integrationManager } from '../providers/integration.manager';
-import { prisma } from '../database/prisma.client';
+import { integrationManager } from "../providers/integration.manager";
+import { db } from "../database/db";
+import { integrations } from "../database/schema";
+import { eq } from "drizzle-orm";
 
 interface ValidationResult {
   isValid: boolean;
@@ -8,7 +10,10 @@ interface ValidationResult {
 }
 
 interface ContentValidationOptions {
-  platformSpecificContent?: Record<string, { content?: string; settings?: any }>;
+  platformSpecificContent?: Record<
+    string,
+    { content?: string; settings?: any }
+  >;
   defaultContent: string;
   integrationIds: string[];
 }
@@ -17,16 +22,18 @@ export class ContentValidationService {
   /**
    * Validate content for multiple platforms
    */
-  async validateContent(options: ContentValidationOptions): Promise<ValidationResult> {
+  async validateContent(
+    options: ContentValidationOptions,
+  ): Promise<ValidationResult> {
     const result: ValidationResult = {
       isValid: true,
       errors: [],
-      warnings: []
+      warnings: [],
     };
 
     // Validate default content
     if (!options.defaultContent || options.defaultContent.trim().length === 0) {
-      result.errors.push('Content cannot be empty');
+      result.errors.push("Content cannot be empty");
       result.isValid = false;
     }
 
@@ -34,20 +41,34 @@ export class ContentValidationService {
     for (const integrationId of options.integrationIds) {
       try {
         // Get platform-specific content or use default
-        const platformContent = options.platformSpecificContent?.[integrationId];
+        const platformContent =
+          options.platformSpecificContent?.[integrationId];
         const content = platformContent?.content || options.defaultContent;
-        
+
         // Validate content length for this platform
-        const validationResult = await this.validatePlatformContent(integrationId, content);
-        
+        const validationResult = await this.validatePlatformContent(
+          integrationId,
+          content,
+        );
+
         if (!validationResult.isValid) {
           result.isValid = false;
-          result.errors.push(...validationResult.errors.map(err => `[${integrationId}] ${err}`));
+          result.errors.push(
+            ...validationResult.errors.map(
+              (err) => `[${integrationId}] ${err}`,
+            ),
+          );
         }
-        
-        result.warnings.push(...validationResult.warnings.map(warn => `[${integrationId}] ${warn}`));
+
+        result.warnings.push(
+          ...validationResult.warnings.map(
+            (warn) => `[${integrationId}] ${warn}`,
+          ),
+        );
       } catch (error: any) {
-        result.errors.push(`Failed to validate content for integration ${integrationId}: ${error.message || 'Unknown error'}`);
+        result.errors.push(
+          `Failed to validate content for integration ${integrationId}: ${error.message || "Unknown error"}`,
+        );
         result.isValid = false;
       }
     }
@@ -58,37 +79,44 @@ export class ContentValidationService {
   /**
    * Validate content for a specific platform
    */
-  private async validatePlatformContent(integrationId: string, content: string): Promise<ValidationResult> {
+  private async validatePlatformContent(
+    integrationId: string,
+    content: string,
+  ): Promise<ValidationResult> {
     const result: ValidationResult = {
       isValid: true,
       errors: [],
-      warnings: []
+      warnings: [],
     };
 
     try {
       // Get the integration from database to determine provider
-      const integration = await prisma.integration.findUnique({
-        where: { id: integrationId }
+      const integration = await db.query.integrations.findFirst({
+        where: eq(integrations.id, integrationId),
       });
 
       if (!integration) {
-        result.errors.push('Integration not found');
+        result.errors.push("Integration not found");
         result.isValid = false;
         return result;
       }
 
       // Check if this is a storage integration - validation is only for social integrations
-      if (integration.type === 'storage') {
-        result.errors.push('Content validation is only available for social media accounts, not storage accounts');
+      if (integration.type === "storage") {
+        result.errors.push(
+          "Content validation is only available for social media accounts, not storage accounts",
+        );
         result.isValid = false;
         return result;
       }
 
       // Get provider for this integration
-      const provider = integrationManager.getSocialIntegration(integration.providerIdentifier);
-      
+      const provider = integrationManager.getSocialIntegration(
+        integration.providerIdentifier,
+      );
+
       if (!provider) {
-        result.errors.push('Unsupported platform');
+        result.errors.push("Unsupported platform");
         result.isValid = false;
         return result;
       }
@@ -96,7 +124,9 @@ export class ContentValidationService {
       // Validate content length
       const maxLength = provider.maxLength();
       if (content.length > maxLength) {
-        result.errors.push(`Content exceeds maximum length of ${maxLength} characters`);
+        result.errors.push(
+          `Content exceeds maximum length of ${maxLength} characters`,
+        );
         result.isValid = false;
       }
 
@@ -113,18 +143,20 @@ export class ContentValidationService {
 
       // Platform-specific validations
       switch (provider.identifier) {
-        case 'instagram':
+        case "instagram":
           this.validateInstagramContent(content, result);
           break;
-        case 'youtube':
+        case "youtube":
           this.validateYouTubeContent(content, result);
           break;
-        case 'twitter':
+        case "twitter":
           this.validateTwitterContent(content, result);
           break;
       }
     } catch (error: any) {
-      result.errors.push(`Validation error: ${error.message || 'Unknown error'}`);
+      result.errors.push(
+        `Validation error: ${error.message || "Unknown error"}`,
+      );
       result.isValid = false;
     }
 
@@ -146,13 +178,15 @@ export class ContentValidationService {
       facebook: 20,
       linkedin: 15,
       youtube: 10,
-      tiktok: 25
+      tiktok: 25,
     };
 
     const maxAllowed = maxHashtags[platform] || 10;
-    
+
     if (hashtags.length > maxAllowed) {
-      errors.push(`Too many hashtags (${hashtags.length}). Maximum allowed: ${maxAllowed}`);
+      errors.push(
+        `Too many hashtags (${hashtags.length}). Maximum allowed: ${maxAllowed}`,
+      );
     }
 
     // Check for invalid hashtags
@@ -160,7 +194,7 @@ export class ContentValidationService {
       if (hashtag.length > 128) {
         errors.push(`Hashtag ${hashtag} is too long (max 128 characters)`);
       }
-      
+
       if (!/^#[\w]+$/.test(hashtag)) {
         errors.push(`Invalid hashtag format: ${hashtag}`);
       }
@@ -178,7 +212,9 @@ export class ContentValidationService {
     const links = content.match(urlRegex) || [];
 
     if (links.length > 0) {
-      warnings.push(`Content contains ${links.length} link(s). Make sure they are appropriate for your audience.`);
+      warnings.push(
+        `Content contains ${links.length} link(s). Make sure they are appropriate for your audience.`,
+      );
     }
 
     return warnings;
@@ -187,15 +223,20 @@ export class ContentValidationService {
   /**
    * Instagram-specific content validation
    */
-  private validateInstagramContent(content: string, result: ValidationResult): void {
+  private validateInstagramContent(
+    content: string,
+    result: ValidationResult,
+  ): void {
     // Check for Instagram-specific restrictions
-    if (content.includes('@')) {
+    if (content.includes("@")) {
       // Check if @ mentions are valid usernames
       const mentionRegex = /@[\w.]+/g;
       const mentions = content.match(mentionRegex) || [];
-      
+
       if (mentions.length > 20) {
-        result.warnings.push('Too many @ mentions. Instagram may limit visibility.');
+        result.warnings.push(
+          "Too many @ mentions. Instagram may limit visibility.",
+        );
       }
     }
   }
@@ -203,20 +244,28 @@ export class ContentValidationService {
   /**
    * YouTube-specific content validation
    */
-  private validateYouTubeContent(content: string, result: ValidationResult): void {
+  private validateYouTubeContent(
+    content: string,
+    result: ValidationResult,
+  ): void {
     // YouTube has different validation rules
     if (content.length < 10) {
-      result.warnings.push('YouTube descriptions should be more descriptive for better SEO.');
+      result.warnings.push(
+        "YouTube descriptions should be more descriptive for better SEO.",
+      );
     }
   }
 
   /**
    * Twitter-specific content validation
    */
-  private validateTwitterContent(content: string, result: ValidationResult): void {
+  private validateTwitterContent(
+    content: string,
+    result: ValidationResult,
+  ): void {
     // Twitter has character limit of 280
     if (content.length > 280) {
-      result.errors.push('Twitter content exceeds 280 character limit');
+      result.errors.push("Twitter content exceeds 280 character limit");
     }
   }
 }

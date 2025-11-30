@@ -1,142 +1,154 @@
-import { Request, Response } from 'express';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { streamText, convertToCoreMessages } from 'ai';
-import { prisma } from '../database/prisma.client';
+import { Request, Response } from "express";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { streamText, convertToCoreMessages } from "ai";
+import { db } from "../database/db";
+import { users, conversations, chatMessages } from "../database/schema";
+import { eq, and, isNull, desc, asc } from "drizzle-orm";
+
+// Default user ID for simplified operation (no auth)
+const DEFAULT_USER_ID = "default-user";
 
 const extractContent = (msg: any) => {
-    if (!msg) return '';
-    if (typeof msg.content === 'string') return msg.content;
-    if (msg.parts && Array.isArray(msg.parts)) {
-        return msg.parts.map((p: any) => p.text || '').join('');
-    }
-    return '';
+  if (!msg) return "";
+  if (typeof msg.content === "string") return msg.content;
+  if (msg.parts && Array.isArray(msg.parts)) {
+    return msg.parts.map((p: any) => p.text || "").join("");
+  }
+  return "";
 };
 
 // Detect media context from user message
 const detectMediaContext = (content: string) => {
-    const context = {
-        hasVideo: false,
-        hasImage: false,
-        fileCount: 0,
-        fileNames: [] as string[],
-        mediaType: null as 'image' | 'video' | 'mixed' | null,
-        contextNote: ''
-    };
+  const context = {
+    hasVideo: false,
+    hasImage: false,
+    fileCount: 0,
+    fileNames: [] as string[],
+    mediaType: null as "image" | "video" | "mixed" | null,
+    contextNote: "",
+  };
 
-    // Detect file extensions in the message
-    const videoExtensions = /\b[\w-]+\.(mp4|mov|avi|wmv|flv|webm|m4v|mkv)\b/gi;
-    const imageExtensions = /\b[\w-]+\.(jpg|jpeg|png|gif|webp|bmp|svg)\b/gi;
+  // Detect file extensions in the message
+  const videoExtensions = /\b[\w-]+\.(mp4|mov|avi|wmv|flv|webm|m4v|mkv)\b/gi;
+  const imageExtensions = /\b[\w-]+\.(jpg|jpeg|png|gif|webp|bmp|svg)\b/gi;
 
-    const videoMatches = content.match(videoExtensions);
-    const imageMatches = content.match(imageExtensions);
+  const videoMatches = content.match(videoExtensions);
+  const imageMatches = content.match(imageExtensions);
 
-    if (videoMatches) {
-        context.hasVideo = true;
-        context.fileCount += videoMatches.length;
-        context.fileNames.push(...videoMatches);
+  if (videoMatches) {
+    context.hasVideo = true;
+    context.fileCount += videoMatches.length;
+    context.fileNames.push(...videoMatches);
+  }
+
+  if (imageMatches) {
+    context.hasImage = true;
+    context.fileCount += imageMatches.length;
+    context.fileNames.push(...imageMatches);
+  }
+
+  // Determine overall media type
+  if (context.hasVideo && context.hasImage) {
+    context.mediaType = "mixed";
+    context.contextNote = `[SYSTEM CONTEXT: User has selected ${context.fileCount} media files (${imageMatches?.length || 0} image(s), ${videoMatches?.length || 0} video(s)). Files: ${context.fileNames.join(", ")}. Apply appropriate platform compatibility rules - images work on Instagram/LinkedIn, videos work on all platforms.]`;
+  } else if (context.hasVideo) {
+    context.mediaType = "video";
+    if (context.fileCount === 1) {
+      context.contextNote = `[SYSTEM CONTEXT: User has selected 1 video file: ${context.fileNames[0]}. This is a SINGLE VIDEO - do not ask about carousels. Video is compatible with Instagram, YouTube, and LinkedIn.]`;
+    } else {
+      context.contextNote = `[SYSTEM CONTEXT: User has selected ${context.fileCount} video files: ${context.fileNames.join(", ")}. Suggest creating separate posts for each video.]`;
     }
-
-    if (imageMatches) {
-        context.hasImage = true;
-        context.fileCount += imageMatches.length;
-        context.fileNames.push(...imageMatches);
+  } else if (context.hasImage) {
+    context.mediaType = "image";
+    if (context.fileCount === 1) {
+      context.contextNote = `[SYSTEM CONTEXT: User has selected 1 image file: ${context.fileNames[0]}. This is a SINGLE IMAGE - compatible with Instagram and LinkedIn only. DO NOT suggest YouTube.]`;
+    } else {
+      context.contextNote = `[SYSTEM CONTEXT: User has selected ${context.fileCount} image files: ${context.fileNames.join(", ")}. Perfect for an Instagram CAROUSEL post! Also compatible with LinkedIn. DO NOT suggest YouTube.]`;
     }
+  }
 
-    // Determine overall media type
-    if (context.hasVideo && context.hasImage) {
-        context.mediaType = 'mixed';
-        context.contextNote = `[SYSTEM CONTEXT: User has selected ${context.fileCount} media files (${imageMatches?.length || 0} image(s), ${videoMatches?.length || 0} video(s)). Files: ${context.fileNames.join(', ')}. Apply appropriate platform compatibility rules - images work on Instagram/LinkedIn, videos work on all platforms.]`;
-    } else if (context.hasVideo) {
-        context.mediaType = 'video';
-        if (context.fileCount === 1) {
-            context.contextNote = `[SYSTEM CONTEXT: User has selected 1 video file: ${context.fileNames[0]}. This is a SINGLE VIDEO - do not ask about carousels. Video is compatible with Instagram, YouTube, and LinkedIn.]`;
-        } else {
-            context.contextNote = `[SYSTEM CONTEXT: User has selected ${context.fileCount} video files: ${context.fileNames.join(', ')}. Suggest creating separate posts for each video.]`;
-        }
-    } else if (context.hasImage) {
-        context.mediaType = 'image';
-        if (context.fileCount === 1) {
-            context.contextNote = `[SYSTEM CONTEXT: User has selected 1 image file: ${context.fileNames[0]}. This is a SINGLE IMAGE - compatible with Instagram and LinkedIn only. DO NOT suggest YouTube.]`;
-        } else {
-            context.contextNote = `[SYSTEM CONTEXT: User has selected ${context.fileCount} image files: ${context.fileNames.join(', ')}. Perfect for an Instagram CAROUSEL post! Also compatible with LinkedIn. DO NOT suggest YouTube.]`;
-        }
-    }
-
-    return context;
+  return context;
 };
 
 export const chatController = {
-    async handleChat(req: Request, res: Response) {
-        try {
-            const { messages, conversationId } = req.body;
-            const userId = (req as any).user.id;
+  async handleChat(req: Request, res: Response) {
+    try {
+      const { messages, conversationId } = req.body;
+      const userId = DEFAULT_USER_ID;
 
-            // Fetch user's API key from database
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
-                select: { geminiApiKey: true }
-            });
+      // Fetch user's API key from database
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: { geminiApiKey: true },
+      });
 
-            const apiKey = user?.geminiApiKey;
+      const apiKey = user?.geminiApiKey;
 
-            if (!apiKey) {
-                return res.status(401).json({ error: 'Gemini API Key is not set in settings' });
-            }
+      if (!apiKey) {
+        return res
+          .status(401)
+          .json({ error: "Gemini API Key is not set in settings" });
+      }
 
-            // 1. Handle Conversation Context
-            let activeConversationId = conversationId;
+      // 1. Handle Conversation Context
+      let activeConversationId = conversationId;
 
-            if (!activeConversationId) {
-                // Create new conversation if none exists
-                const conversation = await prisma.conversation.create({
-                    data: {
-                        userId,
-                        title: extractContent(messages[messages.length - 1]).substring(0, 50) || 'New Conversation',
-                        platform: 'general' // Default, can be updated later
-                    }
-                });
-                activeConversationId = conversation.id;
-            }
+      if (!activeConversationId) {
+        // Create new conversation if none exists
+        const [conversation] = await db
+          .insert(conversations)
+          .values({
+            userId,
+            title:
+              extractContent(messages[messages.length - 1]).substring(0, 50) ||
+              "New Conversation",
+            platform: "general",
+          })
+          .returning();
+        activeConversationId = conversation.id;
+      }
 
-            // 2. Save User Message and Detect Media Context
-            const lastMessage = messages[messages.length - 1];
-            let userContent = extractContent(lastMessage);
+      // 2. Save User Message and Detect Media Context
+      const lastMessage = messages[messages.length - 1];
+      let userContent = extractContent(lastMessage);
 
-            if (lastMessage && lastMessage.role === 'user') {
-                // Detect media context from the message
-                const mediaContext = detectMediaContext(userContent);
+      if (lastMessage && lastMessage.role === "user") {
+        // Detect media context from the message
+        const mediaContext = detectMediaContext(userContent);
 
-                // Save the original user message
-                await prisma.chatMessage.create({
-                    data: {
-                        conversationId: activeConversationId,
-                        role: 'user',
-                        content: userContent
-                    }
-                });
+        // Save the original user message
+        await db.insert(chatMessages).values({
+          conversationId: activeConversationId,
+          role: "user",
+          content: userContent,
+        });
 
-                // If media context detected, enhance the message for AI processing
-                if (mediaContext.mediaType && mediaContext.contextNote) {
-                    console.log('🎯 Media context detected:', mediaContext);
-                    // Append context note to the last message for AI (not saved in DB)
-                    const enhancedMessages = [...messages];
-                    enhancedMessages[enhancedMessages.length - 1] = {
-                        ...lastMessage,
-                        content: userContent + '\n\n' + mediaContext.contextNote
-                    };
-                    // Update messages array for AI processing
-                    messages.splice(messages.length - 1, 1, enhancedMessages[enhancedMessages.length - 1]);
-                }
-            }
+        // If media context detected, enhance the message for AI processing
+        if (mediaContext.mediaType && mediaContext.contextNote) {
+          console.log("🎯 Media context detected:", mediaContext);
+          // Append context note to the last message for AI (not saved in DB)
+          const enhancedMessages = [...messages];
+          enhancedMessages[enhancedMessages.length - 1] = {
+            ...lastMessage,
+            content: userContent + "\n\n" + mediaContext.contextNote,
+          };
+          // Update messages array for AI processing
+          messages.splice(
+            messages.length - 1,
+            1,
+            enhancedMessages[enhancedMessages.length - 1],
+          );
+        }
+      }
 
-            // 3. Initialize AI
-            const google = createGoogleGenerativeAI({ apiKey });
-            const coreMessages = convertToCoreMessages(messages);
+      // 3. Initialize AI
+      const google = createGoogleGenerativeAI({ apiKey });
+      const coreMessages = convertToCoreMessages(messages);
 
-            // 4. Stream Response
-            const result = streamText({
-                model: google('gemini-2.5-flash'),
-                system: `You are an expert AI assistant specialized in social media content creation and scheduling. You have deep knowledge of platform-specific requirements and constraints.
+      // 4. Stream Response
+      const result = streamText({
+        model: google("gemini-2.5-flash"),
+        system: `You are an expert AI assistant specialized in social media content creation and scheduling. You have deep knowledge of platform-specific requirements and constraints.
 
 ## Platform-Specific Rules:
 
@@ -151,14 +163,14 @@ export const chatController = {
 
 ### YouTube:
 - REQUIRES: Video file + Title (mandatory, 1-100 characters)
-- Description: Optional, up to 5,000 characters  
+- Description: Optional, up to 5,000 characters
 - Only works with VIDEO files - never suggest for images
 - If user selects an image, DO NOT include YouTube as an option
 - Always generate a compelling, SEO-friendly title for YouTube videos
 
 ### LinkedIn:
 - REQUIRES: Post content/text (cannot be empty)
-- Max length: 3,000 characters  
+- Max length: 3,000 characters
 - Supports: Text posts, images, videos, documents
 - Professional tone recommended
 - Focus on value-driven, industry-relevant content
@@ -203,174 +215,184 @@ If you detect from the user's message:
 - If user request is incompatible with their selections, explain why clearly and suggest alternatives
 
 Always ask clarifying questions if critical information is missing. Your goal is to prevent scheduling errors by ensuring all platform requirements are met upfront.`,
-                messages: coreMessages,
-            });
+        messages: coreMessages,
+      });
 
-            // Set headers
-            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-            res.setHeader('Transfer-Encoding', 'chunked');
-            res.setHeader('X-Conversation-Id', activeConversationId);
+      // Set headers
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Transfer-Encoding", "chunked");
+      res.setHeader("X-Conversation-Id", activeConversationId);
 
-            const stream = result.textStream;
-            let fullResponse = '';
+      const stream = result.textStream;
+      let fullResponse = "";
 
-            for await (const chunk of stream) {
-                res.write(chunk);
-                fullResponse += chunk;
-            }
+      for await (const chunk of stream) {
+        res.write(chunk);
+        fullResponse += chunk;
+      }
 
-            // 5. Save Assistant Message
-            if (fullResponse) {
-                await prisma.chatMessage.create({
-                    data: {
-                        conversationId: activeConversationId,
-                        role: 'assistant',
-                        content: fullResponse
-                    }
-                });
-            }
+      // 5. Save Assistant Message
+      if (fullResponse) {
+        await db.insert(chatMessages).values({
+          conversationId: activeConversationId,
+          role: "assistant",
+          content: fullResponse,
+        });
+      }
 
-            res.end();
-
-        } catch (error) {
-            console.error('Chat API Error:', error);
-            if (!res.headersSent) {
-                return res.status(500).json({ error: 'Internal Server Error' });
-            }
-        }
-    },
-
-    // Get all conversations for a user
-    async getConversations(req: Request, res: Response) {
-        try {
-            const userId = (req as any).user.id;
-
-            const conversations = await prisma.conversation.findMany({
-                where: {
-                    userId,
-                    deletedAt: null
-                },
-                include: {
-                    messages: {
-                        take: 1,
-                        orderBy: { createdAt: 'desc' }
-                    },
-                    _count: {
-                        select: { messages: true }
-                    }
-                },
-                orderBy: { updatedAt: 'desc' }
-            });
-
-            return res.json(conversations);
-        } catch (error) {
-            console.error('Get conversations error:', error);
-            return res.status(500).json({ error: 'Failed to fetch conversations' });
-        }
-    },
-
-    // Create a new conversation
-    async createConversation(req: Request, res: Response) {
-        try {
-            const userId = (req as any).user.id;
-            const { title, platform, template } = req.body;
-
-            const conversation = await prisma.conversation.create({
-                data: {
-                    userId,
-                    title: title || 'New Conversation',
-                    platform,
-                    template
-                }
-            });
-
-            return res.json(conversation);
-        } catch (error) {
-            console.error('Create conversation error:', error);
-            return res.status(500).json({ error: 'Failed to create conversation' });
-        }
-    },
-
-    // Get a specific conversation with all messages
-    async getConversation(req: Request, res: Response) {
-        try {
-            const userId = (req as any).user.id;
-            const { id } = req.params;
-
-            const conversation = await prisma.conversation.findFirst({
-                where: {
-                    id,
-                    userId,
-                    deletedAt: null
-                },
-                include: {
-                    messages: {
-                        orderBy: { createdAt: 'asc' }
-                    }
-                }
-            });
-
-            if (!conversation) {
-                return res.status(404).json({ error: 'Conversation not found' });
-            }
-
-            return res.json(conversation);
-        } catch (error) {
-            console.error('Get conversation error:', error);
-            return res.status(500).json({ error: 'Failed to fetch conversation' });
-        }
-    },
-
-    // Update conversation (rename)
-    async updateConversation(req: Request, res: Response) {
-        try {
-            const userId = (req as any).user.id;
-            const { id } = req.params;
-            const { title } = req.body;
-
-            const conversation = await prisma.conversation.findFirst({
-                where: { id, userId, deletedAt: null }
-            });
-
-            if (!conversation) {
-                return res.status(404).json({ error: 'Conversation not found' });
-            }
-
-            const updated = await prisma.conversation.update({
-                where: { id },
-                data: { title }
-            });
-
-            return res.json(updated);
-        } catch (error) {
-            console.error('Update conversation error:', error);
-            return res.status(500).json({ error: 'Failed to update conversation' });
-        }
-    },
-
-    // Delete conversation (soft delete)
-    async deleteConversation(req: Request, res: Response) {
-        try {
-            const userId = (req as any).user.id;
-            const { id } = req.params;
-
-            const conversation = await prisma.conversation.findFirst({
-                where: { id, userId, deletedAt: null }
-            });
-
-            if (!conversation) {
-                return res.status(404).json({ error: 'Conversation not found' });
-            }
-
-            await prisma.conversation.update({
-                where: { id },
-                data: { deletedAt: new Date() }
-            });
-
-            return res.json({ success: true });
-        } catch (error) {
-            console.error('Delete conversation error:', error);
-            return res.status(500).json({ error: 'Failed to delete conversation' });
-        }
+      res.end();
+    } catch (error) {
+      console.error("Chat API Error:", error);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
     }
+  },
+
+  // Get all conversations for a user
+  async getConversations(req: Request, res: Response) {
+    try {
+      const userId = DEFAULT_USER_ID;
+
+      const results = await db.query.conversations.findMany({
+        where: and(
+          eq(conversations.userId, userId),
+          isNull(conversations.deletedAt),
+        ),
+        with: {
+          messages: {
+            limit: 1,
+            orderBy: [desc(chatMessages.createdAt)],
+          },
+        },
+        orderBy: [desc(conversations.updatedAt)],
+      });
+
+      // Add message count
+      const conversationsWithCount = results.map((conv) => ({
+        ...conv,
+        _count: { messages: conv.messages.length },
+      }));
+
+      return res.json(conversationsWithCount);
+    } catch (error) {
+      console.error("Get conversations error:", error);
+      return res.status(500).json({ error: "Failed to fetch conversations" });
+    }
+  },
+
+  // Create a new conversation
+  async createConversation(req: Request, res: Response) {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const { title, platform, template } = req.body;
+
+      const [conversation] = await db
+        .insert(conversations)
+        .values({
+          userId,
+          title: title || "New Conversation",
+          platform,
+          template,
+        })
+        .returning();
+
+      return res.json(conversation);
+    } catch (error) {
+      console.error("Create conversation error:", error);
+      return res.status(500).json({ error: "Failed to create conversation" });
+    }
+  },
+
+  // Get a specific conversation with all messages
+  async getConversation(req: Request, res: Response) {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const { id } = req.params;
+
+      const conversation = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.id, id),
+          eq(conversations.userId, userId),
+          isNull(conversations.deletedAt),
+        ),
+        with: {
+          messages: {
+            orderBy: [asc(chatMessages.createdAt)],
+          },
+        },
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      return res.json(conversation);
+    } catch (error) {
+      console.error("Get conversation error:", error);
+      return res.status(500).json({ error: "Failed to fetch conversation" });
+    }
+  },
+
+  // Update conversation (rename)
+  async updateConversation(req: Request, res: Response) {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const { id } = req.params;
+      const { title } = req.body;
+
+      const conversation = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.id, id),
+          eq(conversations.userId, userId),
+          isNull(conversations.deletedAt),
+        ),
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      const [updated] = await db
+        .update(conversations)
+        .set({ title, updatedAt: new Date() })
+        .where(eq(conversations.id, id))
+        .returning();
+
+      return res.json(updated);
+    } catch (error) {
+      console.error("Update conversation error:", error);
+      return res.status(500).json({ error: "Failed to update conversation" });
+    }
+  },
+
+  // Delete conversation (soft delete)
+  async deleteConversation(req: Request, res: Response) {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const { id } = req.params;
+
+      const conversation = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.id, id),
+          eq(conversations.userId, userId),
+          isNull(conversations.deletedAt),
+        ),
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      await db
+        .update(conversations)
+        .set({ deletedAt: new Date() })
+        .where(eq(conversations.id, id));
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Delete conversation error:", error);
+      return res.status(500).json({ error: "Failed to delete conversation" });
+    }
+  },
 };
