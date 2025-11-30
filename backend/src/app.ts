@@ -14,15 +14,21 @@ import { errorMiddleware } from "./middleware/error.middleware";
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
-
-// CORS
+// CORS - must come before other middleware to handle preflight requests
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true,
     exposedHeaders: ["X-Conversation-Id"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Conversation-Id"],
+  }),
+);
+
+// Security middleware - after CORS to not block preflight
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   }),
 );
 

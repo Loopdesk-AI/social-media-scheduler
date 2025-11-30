@@ -1,4 +1,5 @@
 import { Queue, Worker, Job } from "bullmq";
+import { Cluster } from "ioredis";
 import { db } from "../database/db";
 import { posts, integrations } from "../database/schema";
 import { eq } from "drizzle-orm";
@@ -7,6 +8,11 @@ import { decrypt } from "./encryption.service";
 import { RefreshToken } from "../utils/errors";
 import { safeJsonParse } from "../utils/helpers";
 import logger from "../utils/logger";
+
+// Check if Redis is configured
+const REDIS_ENABLED = !!process.env.REDIS_HOST;
+const REDIS_CLUSTER_MODE = process.env.REDIS_CLUSTER_MODE === "true";
+const REDIS_TLS = process.env.REDIS_TLS === "true";
 
 /**
  * Safely serialize errors, handling circular references from axios
@@ -36,41 +42,129 @@ function serializeError(error: any): any {
 /**
  * Queue Service
  * Manages BullMQ queue and worker for processing scheduled posts
+ * Gracefully handles missing Redis connection
  */
 export class QueueService {
-  private queue: Queue;
-  private worker: Worker;
+  private queue: Queue | null = null;
+  private worker: Worker | null = null;
+  private isInitialized = false;
 
   constructor() {
-    const connection = {
-      host: process.env.REDIS_HOST || "localhost",
-      port: parseInt(process.env.REDIS_PORT || "6379"),
-      password: process.env.REDIS_PASSWORD || undefined,
-    };
+    if (!REDIS_ENABLED) {
+      logger.warn(
+        "⚠️  Redis not configured - Queue service disabled. Scheduled posts will not be processed automatically.",
+      );
+      return;
+    }
 
-    // Initialize queue
-    this.queue = new Queue("posts", { connection });
+    this.initializeQueue();
+  }
 
-    // Initialize worker in same process
-    this.worker = new Worker("posts", this.processJob.bind(this), {
-      connection,
-      concurrency: 5,
-    });
+  /**
+   * Initialize queue and worker with Redis connection
+   * Supports both standalone Redis and AWS ElastiCache cluster mode
+   */
+  private initializeQueue() {
+    try {
+      let connection: any;
 
-    // Event listeners
-    this.worker.on("completed", (job) => {
-      logger.info(`Job ${job.id} completed successfully`);
-    });
+      if (REDIS_CLUSTER_MODE) {
+        // AWS ElastiCache Cluster Mode - use ioredis Cluster
+        logger.info("🔄 Initializing BullMQ with Redis cluster mode...");
 
-    this.worker.on("failed", (job, err) => {
-      logger.error(`Job ${job?.id} failed: ${err.message}`);
-    });
+        const clusterNodes = [
+          {
+            host: process.env.REDIS_HOST!,
+            port: parseInt(process.env.REDIS_PORT || "6379"),
+          },
+        ];
 
-    this.worker.on("error", (err) => {
-      logger.error("Worker error:", err);
-    });
+        const clusterOptions = {
+          redisOptions: {
+            password: process.env.REDIS_PASSWORD || undefined,
+            tls: REDIS_TLS
+              ? {
+                  rejectUnauthorized: false,
+                }
+              : undefined,
+            connectTimeout: 10000,
+            maxRetriesPerRequest: 3,
+          },
+          enableReadyCheck: true,
+          clusterRetryStrategy: (times: number) => {
+            if (times > 5) {
+              logger.error("Redis cluster connection failed after 5 retries");
+              return null;
+            }
+            return Math.min(times * 200, 5000);
+          },
+        };
 
-    logger.info("BullMQ worker initialized");
+        // BullMQ supports ioredis Cluster directly
+        connection = new Cluster(clusterNodes, clusterOptions);
+      } else {
+        // Standalone Redis Mode
+        logger.info("🔄 Initializing BullMQ with standalone Redis...");
+
+        connection = {
+          host: process.env.REDIS_HOST,
+          port: parseInt(process.env.REDIS_PORT || "6379"),
+          password: process.env.REDIS_PASSWORD || undefined,
+          tls: REDIS_TLS
+            ? {
+                rejectUnauthorized: false,
+              }
+            : undefined,
+          connectTimeout: 10000,
+          maxRetriesPerRequest: 3,
+          retryStrategy: (times: number) => {
+            if (times > 5) {
+              logger.error("Redis connection failed after 5 retries");
+              return null;
+            }
+            return Math.min(times * 200, 5000);
+          },
+        };
+      }
+
+      // Initialize queue
+      this.queue = new Queue("posts", { connection });
+
+      // Initialize worker in same process
+      this.worker = new Worker("posts", this.processJob.bind(this), {
+        connection,
+        concurrency: 5,
+      });
+
+      // Event listeners
+      this.worker.on("completed", (job) => {
+        logger.info(`Job ${job.id} completed successfully`);
+      });
+
+      this.worker.on("failed", (job, err) => {
+        logger.error(`Job ${job?.id} failed: ${err.message}`);
+      });
+
+      this.worker.on("error", (err) => {
+        logger.error("Worker error:", serializeError(err));
+      });
+
+      this.isInitialized = true;
+      logger.info("BullMQ worker initialized");
+    } catch (error) {
+      logger.error(
+        "Failed to initialize queue service:",
+        serializeError(error),
+      );
+      this.isInitialized = false;
+    }
+  }
+
+  /**
+   * Check if queue service is available
+   */
+  isAvailable(): boolean {
+    return this.isInitialized && this.queue !== null;
   }
 
   /**
@@ -83,8 +177,15 @@ export class QueueService {
   async addJob(
     postId: string,
     publishDate: Date,
-    priority: number = 5,
+    priority = 5,
   ): Promise<string> {
+    if (!this.isAvailable() || !this.queue) {
+      logger.warn(
+        `Queue not available - post ${postId} scheduled but won't be auto-published`,
+      );
+      return `mock-job-${postId}`;
+    }
+
     const delay = publishDate.getTime() - Date.now();
 
     if (delay < 0) {
@@ -130,6 +231,7 @@ export class QueueService {
    * Find job by post ID
    */
   private async findJobByPostId(postId: string): Promise<Job | null> {
+    if (!this.queue) return null;
     const jobId = `post-${postId}`;
     const job = await this.queue.getJob(jobId);
     return job || null;
@@ -140,6 +242,10 @@ export class QueueService {
    * @param jobId Job ID to remove
    */
   async removeJob(jobId: string): Promise<void> {
+    if (!this.queue) {
+      logger.warn(`Queue not available - cannot remove job ${jobId}`);
+      return;
+    }
     const job = await this.queue.getJob(jobId);
     if (job) {
       await job.remove();
@@ -358,7 +464,7 @@ export class QueueService {
   /**
    * Get queue instance for monitoring
    */
-  getQueue(): Queue {
+  getQueue(): Queue | null {
     return this.queue;
   }
 
@@ -366,6 +472,18 @@ export class QueueService {
    * Get queue metrics
    */
   async getMetrics() {
+    if (!this.isAvailable() || !this.queue) {
+      return {
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+        total: 0,
+        available: false,
+      };
+    }
+
     const [waiting, active, completed, failed, delayed] = await Promise.all([
       this.queue.getWaitingCount(),
       this.queue.getActiveCount(),
@@ -381,6 +499,7 @@ export class QueueService {
       failed,
       delayed,
       total: waiting + active + completed + failed + delayed,
+      available: true,
     };
   }
 
@@ -389,8 +508,12 @@ export class QueueService {
    */
   async close(): Promise<void> {
     console.log("Closing queue service...");
-    await this.worker.close();
-    await this.queue.close();
+    if (this.worker) {
+      await this.worker.close();
+    }
+    if (this.queue) {
+      await this.queue.close();
+    }
   }
 }
 
