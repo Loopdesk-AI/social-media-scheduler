@@ -14,7 +14,7 @@ Express.js backend for the Social Media Scheduler application.
 
 - Node.js 18+
 - Cloud-hosted PostgreSQL database
-- Cloud-hosted Redis instance
+- Cloud-hosted Redis instance (or local Redis for development)
 
 ## Environment Variables
 
@@ -30,11 +30,12 @@ BACKEND_URL=http://localhost:3000
 # Database (Cloud Postgres)
 DATABASE_URL=postgresql://user:password@host:5432/database
 
-# Redis (Cloud Redis)
-REDIS_HOST=your-redis-host.com
+# Redis Configuration
+REDIS_HOST=your-redis-host.com    # Use 127.0.0.1 if using SSH tunnel
 REDIS_PORT=6379
 REDIS_PASSWORD=                   # Optional - leave empty if Redis has no auth
-REDIS_TLS=false
+REDIS_TLS=false                   # Set to true for AWS ElastiCache with TLS
+REDIS_CLUSTER_MODE=false          # Set to true for AWS ElastiCache cluster mode
 
 # Encryption Key (64 hex characters)
 # Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -106,6 +107,94 @@ npm run dev
 ```
 
 The server will start at `http://localhost:3000`.
+
+## Redis Configuration
+
+### Option 1: Local Redis (Recommended for Development)
+
+Install and run Redis locally:
+
+```bash
+# macOS
+brew install redis
+brew services start redis
+
+# Ubuntu/Debian
+sudo apt-get install redis-server
+sudo systemctl start redis
+```
+
+Configure `.env`:
+
+```env
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_TLS=false
+REDIS_CLUSTER_MODE=false
+```
+
+### Option 2: SSH Tunnel to AWS ElastiCache
+
+AWS ElastiCache is only accessible from within the same VPC. To connect from your local machine, use an SSH tunnel through an EC2 instance in the same VPC.
+
+**Step 1: Open SSH tunnel (run in a separate terminal)**
+
+```bash
+ssh -i /path/to/your-key.pem \
+    -L 6379:your-elasticache-endpoint.cache.amazonaws.com:6379 \
+    ec2-user@your-ec2-public-ip \
+    -N
+```
+
+Replace:
+- `/path/to/your-key.pem` - Path to your EC2 SSH key
+- `your-elasticache-endpoint.cache.amazonaws.com` - Your ElastiCache endpoint
+- `your-ec2-public-ip` - Public IP of an EC2 instance in the same VPC
+
+**Step 2: Configure `.env` for tunnel**
+
+```env
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_TLS=false
+REDIS_CLUSTER_MODE=false
+```
+
+> **Note:** When using SSH tunnel, connect without TLS (the tunnel handles encryption) and use standalone mode since you're connecting to a single forwarded port.
+
+### Option 3: Direct Connection (AWS EC2/ECS in Same VPC)
+
+When running the backend on AWS infrastructure in the same VPC as ElastiCache:
+
+```env
+REDIS_HOST=clustercfg.your-cluster.region.cache.amazonaws.com
+REDIS_PORT=6379
+REDIS_TLS=true
+REDIS_CLUSTER_MODE=true
+```
+
+### Option 4: Disable Redis (Limited Functionality)
+
+To run without Redis (scheduled posts won't auto-publish):
+
+```env
+# Comment out or remove REDIS_HOST
+# REDIS_HOST=...
+```
+
+### Testing Redis Connection
+
+Use the included test script to verify your Redis connection:
+
+```bash
+npx ts-node test-redis.ts
+```
+
+Or with custom configuration:
+
+```bash
+REDIS_HOST=127.0.0.1 REDIS_PORT=6379 npx ts-node test-redis.ts
+```
 
 ## Available Scripts
 
