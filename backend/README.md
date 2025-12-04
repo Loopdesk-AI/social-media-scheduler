@@ -272,18 +272,10 @@ src/
 - `GET /api/storage/:id/files` - List files from storage
 - `POST /api/storage/:id/import/:fileId` - Import file from storage
 
-### Chat
-
-- `POST /api/chat` - AI chat (streaming)
-- `GET /api/chat/conversations` - List conversations
-- `POST /api/chat/conversations` - Create conversation
-- `GET /api/chat/conversations/:id` - Get conversation
-- `DELETE /api/chat/conversations/:id` - Delete conversation
-
 ### User
 
 - `GET /api/user/profile` - Get user profile
-- `PUT /api/user/profile` - Update profile (Gemini API key)
+- `PUT /api/user/profile` - Update profile
 
 ### Admin
 

@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   backend:
@@ -42,13 +42,18 @@ services:
       - CLOUDFLARE_R2_SECRET_KEY=${CLOUDFLARE_R2_SECRET_KEY}
       - CLOUDFLARE_R2_BUCKET=${CLOUDFLARE_R2_BUCKET}
       - CLOUDFLARE_R2_PUBLIC_URL=${CLOUDFLARE_R2_PUBLIC_URL}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ENABLE_BULL_BOARD=${ENABLE_BULL_BOARD:-false}
     volumes:
       - uploads_data:/app/uploads
       - logs_data:/app/logs
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health/live', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3001/health/live', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

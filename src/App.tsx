@@ -10,14 +10,10 @@ import { toast } from "sonner";
 import { ViewType } from "./types";
 import { useApp } from "./contexts/AppContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { ChatInterface } from "./components/Chatbot/ChatInterface";
-import { SettingsModal } from "./components/SettingsModal";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function App() {
   const [activeView, setActiveView] = useState<ViewType>("calendar");
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { refreshIntegrations, loading } = useApp();
 
@@ -72,8 +68,6 @@ export function App() {
           <Navigation
             activeView={activeView}
             onNavigate={handleNavigationClick}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onToggleChat={() => setIsChatOpen(!isChatOpen)}
             onOpenAccount={() => setActiveView("account")}
           />
           <div className="flex-1 ml-16 p-8">
@@ -87,14 +81,6 @@ export function App() {
               <AccountView key="social" initialSection="social-connected" />
             )}
           </div>
-
-          <ChatInterface
-            isOpen={isChatOpen}
-            onClose={() => setIsChatOpen(false)}
-          />
-          {isSettingsOpen && (
-            <SettingsModal onClose={() => setIsSettingsOpen(false)} />
-          )}
         </div>
       </TooltipProvider>
     </ThemeProvider>

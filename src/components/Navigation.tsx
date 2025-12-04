@@ -4,8 +4,6 @@ import {
   Users,
   LogOut,
   FolderOpen,
-  Settings,
-  Sparkles,
   Sun,
   Moon,
 } from "lucide-react";
@@ -26,16 +24,12 @@ import { Separator } from "@/components/ui/separator";
 type NavigationProps = {
   activeView: ViewType;
   onNavigate: (view: ViewType) => void;
-  onOpenSettings: () => void;
-  onToggleChat: () => void;
   onOpenAccount: () => void;
 };
 
 export function Navigation({
   activeView,
   onNavigate,
-  onOpenSettings,
-  onToggleChat,
   onOpenAccount,
 }: NavigationProps) {
   const { logout, user } = useApp();
@@ -126,22 +120,6 @@ export function Navigation({
             <Button
               variant="ghost"
               size="icon"
-              onClick={onOpenSettings}
-              className="h-10 w-10"
-            >
-              <Settings className="h-5 w-5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            <p>Settings</p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
               onClick={toggleTheme}
               className="h-10 w-10"
             >
@@ -154,21 +132,6 @@ export function Navigation({
           </TooltipTrigger>
           <TooltipContent side="right">
             <p>{theme === "dark" ? "Light Mode" : "Dark Mode"}</p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              size="icon"
-              onClick={onToggleChat}
-              className="h-10 w-10 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg"
-            >
-              <Sparkles className="h-5 w-5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            <p>AI Assistant</p>
           </TooltipContent>
         </Tooltip>
 

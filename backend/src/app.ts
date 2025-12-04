@@ -7,7 +7,6 @@ import { postsRoutes } from "./routes/posts.routes";
 import { mediaRoutes } from "./routes/media.routes";
 import analyticsRoutes from "./routes/analytics.routes";
 import storageRoutes from "./routes/storage.routes";
-import { chatRoutes } from "./routes/chat.routes";
 import { userRoutes } from "./routes/user.routes";
 import { monitoringRoutes } from "./routes/monitoring.routes";
 import { errorMiddleware } from "./middleware/error.middleware";
@@ -19,9 +18,8 @@ app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true,
-    exposedHeaders: ["X-Conversation-Id"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Conversation-Id"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 
@@ -59,7 +57,6 @@ app.use("/api/posts", postsRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/storage", storageRoutes);
-app.use("/api/chat", chatRoutes);
 app.use("/api/user", userRoutes);
 
 // 404 handler

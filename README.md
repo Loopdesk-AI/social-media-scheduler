@@ -9,7 +9,6 @@ A modern social media scheduling application for managing and scheduling posts a
 - 🔗 **Multi-Platform Support** - Support for YouTube, Instagram, LinkedIn, and more
 - ⏰ **Smart Scheduling** - Schedule posts with timezone awareness
 - 📹 **Video Management** - Upload and manage video content
-- 🤖 **AI Content Assistant** - Generate content with Gemini AI integration
 - ☁️ **Cloud Storage** - Connect Google Drive and Dropbox for media management
 
 ## Architecture

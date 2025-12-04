@@ -10,7 +10,7 @@ export const userController = {
   async updateProfile(req: Request, res: Response) {
     try {
       const userId = DEFAULT_USER_ID;
-      const { geminiApiKey } = req.body;
+      const { name, email } = req.body;
 
       // Check if user exists, if not create one
       const existingUser = await db.query.users.findFirst({
@@ -24,27 +24,30 @@ export const userController = {
           .insert(users)
           .values({
             id: userId,
-            email: "default@example.com",
-            name: "Default User",
-            geminiApiKey,
+            email: email || "default@example.com",
+            name: name || "Default User",
           })
           .returning({
             id: users.id,
             email: users.email,
             name: users.name,
-            geminiApiKey: users.geminiApiKey,
           });
         updatedUser = created;
       } else {
+        const updateData: { name?: string; email?: string; updatedAt: Date } = {
+          updatedAt: new Date(),
+        };
+        if (name !== undefined) updateData.name = name;
+        if (email !== undefined) updateData.email = email;
+
         const [updated] = await db
           .update(users)
-          .set({ geminiApiKey, updatedAt: new Date() })
+          .set(updateData)
           .where(eq(users.id, userId))
           .returning({
             id: users.id,
             email: users.email,
             name: users.name,
-            geminiApiKey: users.geminiApiKey,
           });
         updatedUser = updated;
       }
@@ -66,7 +69,6 @@ export const userController = {
           id: true,
           email: true,
           name: true,
-          geminiApiKey: true,
         },
       });
 
@@ -83,7 +85,6 @@ export const userController = {
             id: users.id,
             email: users.email,
             name: users.name,
-            geminiApiKey: users.geminiApiKey,
           });
         user = created;
       }
