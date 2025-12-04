@@ -1,11 +1,32 @@
 // CRITICAL: Load environment variables FIRST before any other imports
 import { config } from "dotenv";
-const result = config();
+import { existsSync } from "fs";
 
-if (result.error) {
-  console.error("❌ Failed to load .env file:", result.error);
-  console.error("   Make sure backend/.env exists and is readable");
+// Load .env first (base config), then .env.local to override (local takes priority)
+const envPath = ".env";
+const envLocalPath = ".env.local";
+
+if (existsSync(envPath)) {
+  const result = config({ path: envPath });
+  if (result.error) {
+    console.error("❌ Failed to load .env file:", result.error);
+    process.exit(1);
+  }
+  console.log("✅ Loaded environment from .env");
+} else {
+  console.error("❌ No .env file found");
+  console.error("   Make sure backend/.env exists");
   process.exit(1);
+}
+
+// Load .env.local to override base config (if it exists)
+if (existsSync(envLocalPath)) {
+  const result = config({ path: envLocalPath, override: true });
+  if (result.error) {
+    console.error("❌ Failed to load .env.local file:", result.error);
+    process.exit(1);
+  }
+  console.log("✅ Loaded local overrides from .env.local");
 }
 
 // Validate environment variables before importing anything else

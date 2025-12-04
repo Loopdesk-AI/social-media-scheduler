@@ -8,16 +8,22 @@ dist/
 .env
 .env.local
 .env.backup
+.env.production
+!.env.example
+!.env.production.example
 
 # Uploads directory (keep structure, ignore contents)
 uploads/*
 !uploads/.gitkeep
 
+# Logs directory (keep structure, ignore contents)
+logs/*
+!logs/.gitkeep
+
 # Drizzle migrations (generated)
 drizzle/
 
 # Logs
-logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -42,3 +48,15 @@ Thumbs.db
 # Editor
 .idea/
 *.sw?
+
+# Docker
+.docker/
+
+# PM2
+.pm2/
+
+# SSL certificates (if stored locally)
+*.pem
+*.key
+*.crt
+!deploy/*.example.pem

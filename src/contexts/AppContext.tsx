@@ -9,11 +9,19 @@ import {
 import { api, Integration, Post, StorageIntegration } from "../lib/api";
 import { toast } from "sonner";
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
 interface AppContextType {
+  user: User | null;
   integrations: Integration[];
   storageIntegrations: StorageIntegration[];
   posts: Post[];
   loading: boolean;
+  logout: () => void;
   refreshIntegrations: () => Promise<void>;
   refreshStorageIntegrations: () => Promise<void>;
   refreshPosts: (filters?: any) => Promise<void>;
@@ -29,6 +37,11 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>({
+    id: "1",
+    name: "User",
+    email: "user@example.com",
+  });
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [storageIntegrations, setStorageIntegrations] = useState<
     StorageIntegration[]
@@ -53,6 +66,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     loadData();
+  }, []);
+
+  const logout = useCallback(() => {
+    setUser(null);
+    // Clear any stored tokens/session data
+    localStorage.removeItem("auth_token");
+    toast.success("Logged out successfully");
   }, []);
 
   const refreshIntegrations = useCallback(async () => {
@@ -185,10 +205,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider
       value={{
+        user,
         integrations,
         storageIntegrations,
         posts,
         loading,
+        logout,
         refreshIntegrations,
         refreshStorageIntegrations,
         refreshPosts,

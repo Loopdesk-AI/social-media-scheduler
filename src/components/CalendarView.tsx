@@ -1,84 +1,113 @@
-import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Upload } from 'lucide-react';
-import { CalendarSidebar } from './CalendarSidebar';
-import { WeekView } from './WeekView';
-import { MonthView } from './MonthView';
-import { DayView } from './DayView';
-import { ScheduleView } from './ScheduleView';
-import { YearView } from './YearView';
-import { ViewSwitcher, CalendarViewType } from './ViewSwitcher';
-import { SchedulePostModal } from './SchedulePostModal';
-import { UploadVideoModal } from './UploadVideoModal';
-import { DayDetailModal } from './DayDetailModal';
-import { TimePickerModal } from './TimePickerModal';
-import { useApp } from '../contexts/AppContext';
-import { toast } from 'sonner';
+import { useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight, Plus, Upload } from "lucide-react";
+import { CalendarSidebar } from "./CalendarSidebar";
+import { WeekView } from "./WeekView";
+import { MonthView } from "./MonthView";
+import { DayView } from "./DayView";
+import { ScheduleView } from "./ScheduleView";
+import { YearView } from "./YearView";
+import { ViewSwitcher, CalendarViewType } from "./ViewSwitcher";
+import { SchedulePostModal } from "./SchedulePostModal";
+import { UploadVideoModal } from "./UploadVideoModal";
+import { DayDetailModal } from "./DayDetailModal";
+import { TimePickerModal } from "./TimePickerModal";
+import { useApp } from "../contexts/AppContext";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 export function CalendarView() {
   const { posts, refreshPosts, deletePost } = useApp();
   const today = new Date();
-  const [currentDate, setCurrentDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [currentDate, setCurrentDate] = useState(
+    new Date(today.getFullYear(), today.getMonth(), 1),
+  );
   const [selectedDate, setSelectedDate] = useState(today);
-  const [currentView, setCurrentView] = useState<CalendarViewType>('week');
+  const [currentView, setCurrentView] = useState<CalendarViewType>("week");
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [pendingDropDate, setPendingDropDate] = useState<Date | null>(null);
   const [editingPost, setEditingPost] = useState<any | null>(null);
-  const [modalMode, setModalMode] = useState<'create' | 'edit' | 'duplicate'>('create');
+  const [modalMode, setModalMode] = useState<"create" | "edit" | "duplicate">(
+    "create",
+  );
   const [filters, setFilters] = useState([
-    { id: 'daily-tasks', name: 'Daily Tasks', enabled: true, color: '#3B82F6' },
-    { id: 'birthdays', name: 'Birthdays', enabled: true, color: '#F59E0B' },
-    { id: 'tasks', name: 'Tasks', enabled: true, color: '#10B981' }
+    { id: "daily-tasks", name: "Daily Tasks", enabled: true, color: "#3B82F6" },
+    { id: "birthdays", name: "Birthdays", enabled: true, color: "#F59E0B" },
+    { id: "tasks", name: "Tasks", enabled: true, color: "#10B981" },
   ]);
 
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
 
   useEffect(() => {
-    const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString();
-    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString();
+    const startDate = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      1,
+    ).toISOString();
+    const endDate = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      0,
+    ).toISOString();
     refreshPosts({ startDate, endDate });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate]); // Only re-fetch when month changes
 
-  const events = posts.map(post => {
+  const events = posts.map((post) => {
     const startTime = new Date(post.publishDate);
     const endTime = new Date(startTime.getTime() + 30 * 60000);
 
     const platformCategoryMap: Record<string, any> = {
-      'youtube': 'design',
-      'instagram': 'appointment',
-      'linkedin': 'development',
-      'twitter': 'meeting',
-      'facebook': 'launch'
+      youtube: "design",
+      instagram: "appointment",
+      linkedin: "development",
+      twitter: "meeting",
+      facebook: "launch",
     };
 
     return {
       id: post.id,
-      title: post.content.substring(0, 50) || 'Untitled Post',
+      title: post.content.substring(0, 50) || "Untitled Post",
       startTime,
       endTime,
-      category: platformCategoryMap[post.integration.providerIdentifier] || 'reminder',
-      participants: []
+      category:
+        platformCategoryMap[post.integration.providerIdentifier] || "reminder",
+      participants: [],
     };
   });
 
   const handleToggleFilter = (id: string) => {
-    setFilters(filters.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f));
+    setFilters(
+      filters.map((f) => (f.id === id ? { ...f, enabled: !f.enabled } : f)),
+    );
   };
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
     setCurrentDate(new Date(date.getFullYear(), date.getMonth(), 1));
-    if (currentView === 'month') {
-      setCurrentView('week');
+    if (currentView === "month") {
+      setCurrentView("week");
     }
   };
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
-    setCurrentView('day');
+    setCurrentView("day");
   };
 
   const handleTimeSlotClick = (date: Date) => {
@@ -87,7 +116,7 @@ export function CalendarView() {
   };
 
   const handleEventClick = (eventId: string) => {
-    const post = posts.find(p => p.id === eventId);
+    const post = posts.find((p) => p.id === eventId);
     if (post) {
       handleEditPost(post);
     }
@@ -96,27 +125,27 @@ export function CalendarView() {
   const handleDeletePost = async (postId: string) => {
     try {
       await deletePost(postId);
-      toast.success('Post deleted successfully');
+      toast.success("Post deleted successfully");
     } catch (error) {
-      toast.error('Failed to delete post');
+      toast.error("Failed to delete post");
     }
   };
 
   const handleEditPost = (post: any) => {
     setEditingPost(post);
-    setModalMode('edit');
+    setModalMode("edit");
     setIsScheduleModalOpen(true);
   };
 
   const handleDuplicatePost = (post: any) => {
     setEditingPost(post);
-    setModalMode('duplicate');
+    setModalMode("duplicate");
     setIsScheduleModalOpen(true);
   };
 
   const handleOpenScheduleModal = () => {
     setEditingPost(null);
-    setModalMode('create');
+    setModalMode("create");
     setIsScheduleModalOpen(true);
   };
 
@@ -142,79 +171,75 @@ export function CalendarView() {
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-8 py-6 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800">
+        <div className="px-8 py-6 bg-background border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <button
+                <Button
+                  variant="outline"
                   onClick={() => {
                     setSelectedDate(new Date());
                     setCurrentDate(new Date());
                   }}
-                  className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm font-medium text-gray-700 dark:text-gray-200"
                 >
                   Today
-                </button>
+                </Button>
                 <div className="flex items-center gap-1">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={goToPreviousMonth}
-                    className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-all"
+                    className="h-8 w-8 rounded-full"
                   >
-                    <ChevronLeft size={20} className="text-gray-600 dark:text-gray-400" />
-                  </button>
-                  <button
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={goToNextMonth}
-                    className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-all"
+                    className="h-8 w-8 rounded-full"
                   >
-                    <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
-                  </button>
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
                 </div>
-                <h1 className="text-xl font-normal text-gray-900 dark:text-white ml-2">
-                  {currentView === 'year'
+                <h1 className="text-xl font-normal ml-2">
+                  {currentView === "year"
                     ? currentDate.getFullYear()
-                    : `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`
-                  }
+                    : `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`}
                 </h1>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <ViewSwitcher currentView={currentView} onViewChange={setCurrentView} />
+              <ViewSwitcher
+                currentView={currentView}
+                onViewChange={setCurrentView}
+              />
 
               <div className="flex gap-3">
-                <button
-                  onClick={handleOpenScheduleModal}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium
-                             bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700
-                             text-white shadow-lg shadow-blue-500/30
-                             transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <Plus size={20} />
+                <Button onClick={handleOpenScheduleModal} className="gap-2">
+                  <Plus className="h-5 w-5" />
                   Schedule Post
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="outline"
                   onClick={() => setIsUploadModalOpen(true)}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium
-                             bg-gray-200 dark:bg-gray-800/50
-                             border border-gray-300 dark:border-gray-700
-                             hover:bg-gray-300 dark:hover:bg-gray-700/50
-                             text-gray-900 dark:text-white
-                             transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  className="gap-2"
                 >
-                  <Upload size={20} />
+                  <Upload className="h-5 w-5" />
                   Upload Video
-                </button>
+                </Button>
               </div>
             </div>
           </div>
 
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-muted-foreground">
             Schedule and manage your social media posts
           </p>
         </div>
 
         <div className="flex-1 overflow-hidden p-8">
-          {currentView === 'week' && (
+          {currentView === "week" && (
             <WeekView
               selectedDate={selectedDate}
               events={events}
@@ -222,7 +247,7 @@ export function CalendarView() {
               daysToShow={7}
             />
           )}
-          {currentView === '4day' && (
+          {currentView === "4day" && (
             <WeekView
               selectedDate={selectedDate}
               events={events}
@@ -230,7 +255,7 @@ export function CalendarView() {
               daysToShow={4}
             />
           )}
-          {currentView === 'month' && (
+          {currentView === "month" && (
             <MonthView
               selectedDate={currentDate}
               events={events}
@@ -238,7 +263,7 @@ export function CalendarView() {
               onDayClick={handleDayClick}
             />
           )}
-          {currentView === 'day' && (
+          {currentView === "day" && (
             <DayView
               selectedDate={selectedDate}
               events={events}
@@ -246,23 +271,20 @@ export function CalendarView() {
               onTimeSlotClick={handleTimeSlotClick}
             />
           )}
-          {currentView === 'schedule' && (
-            <ScheduleView
-              events={events}
-              onEventClick={handleEventClick}
-            />
+          {currentView === "schedule" && (
+            <ScheduleView events={events} onEventClick={handleEventClick} />
           )}
-          {currentView === 'year' && (
+          {currentView === "year" && (
             <YearView
               currentDate={currentDate}
               onMonthClick={(date) => {
                 setCurrentDate(date);
-                setCurrentView('month');
+                setCurrentView("month");
               }}
               onDayClick={(date) => {
                 setSelectedDate(date);
                 setCurrentDate(date);
-                setCurrentView('day');
+                setCurrentView("day");
               }}
             />
           )}
@@ -274,17 +296,19 @@ export function CalendarView() {
           onClose={() => {
             setIsScheduleModalOpen(false);
             setEditingPost(null);
-            setModalMode('create');
+            setModalMode("create");
           }}
           initialPost={editingPost}
           mode={modalMode}
         />
       )}
-      {isUploadModalOpen && <UploadVideoModal onClose={() => setIsUploadModalOpen(false)} />}
+      {isUploadModalOpen && (
+        <UploadVideoModal onClose={() => setIsUploadModalOpen(false)} />
+      )}
       {selectedDay && (
         <DayDetailModal
           date={selectedDay}
-          posts={posts.filter(p => {
+          posts={posts.filter((p) => {
             const postDate = new Date(p.publishDate);
             return postDate.toDateString() === selectedDay.toDateString();
           })}

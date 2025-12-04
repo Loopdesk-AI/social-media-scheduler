@@ -1,19 +1,46 @@
-import { useState, useEffect } from 'react';
-import { TrendingUp, Users, Eye, Heart, MessageCircle, Share2, Calendar } from 'lucide-react';
-import { useApp } from '../contexts/AppContext';
-import { api, AnalyticsResponse } from '../lib/api';
-import { toast } from 'sonner';
+import { useState, useEffect } from "react";
+import {
+  TrendingUp,
+  Users,
+  Eye,
+  Heart,
+  MessageCircle,
+  Share2,
+  Calendar,
+} from "lucide-react";
+import { useApp } from "../contexts/AppContext";
+import { api, AnalyticsResponse } from "../lib/api";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function AnalyticsView() {
   const { integrations, loading: integrationsLoading } = useApp();
-  const [selectedIntegration, setSelectedIntegration] = useState<string | null>(null);
+  const [selectedIntegration, setSelectedIntegration] = useState<string | null>(
+    null,
+  );
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [period, setPeriod] = useState(30);
 
-  const socialIntegrations = integrations.filter(integration =>
-    integration.providerIdentifier !== 'google-drive' &&
-    integration.providerIdentifier !== 'dropbox'
+  const socialIntegrations = integrations.filter(
+    (integration) =>
+      integration.providerIdentifier !== "google-drive" &&
+      integration.providerIdentifier !== "dropbox",
   );
 
   useEffect(() => {
@@ -36,8 +63,8 @@ export function AnalyticsView() {
       const data = await api.getAnalytics(selectedIntegration, period);
       setAnalytics(data);
     } catch (error: any) {
-      console.error('Failed to fetch analytics:', error);
-      toast.error(error.message || 'Failed to load analytics');
+      console.error("Failed to fetch analytics:", error);
+      toast.error(error.message || "Failed to load analytics");
     } finally {
       setLoading(false);
     }
@@ -45,11 +72,18 @@ export function AnalyticsView() {
 
   const getMetricIcon = (label: string) => {
     const lower = label.toLowerCase();
-    if (lower.includes('follower') || lower.includes('subscriber')) return Users;
-    if (lower.includes('reach') || lower.includes('view') || lower.includes('impression')) return Eye;
-    if (lower.includes('like') || lower.includes('favorite')) return Heart;
-    if (lower.includes('comment') || lower.includes('repl')) return MessageCircle;
-    if (lower.includes('share') || lower.includes('retweet')) return Share2;
+    if (lower.includes("follower") || lower.includes("subscriber"))
+      return Users;
+    if (
+      lower.includes("reach") ||
+      lower.includes("view") ||
+      lower.includes("impression")
+    )
+      return Eye;
+    if (lower.includes("like") || lower.includes("favorite")) return Heart;
+    if (lower.includes("comment") || lower.includes("repl"))
+      return MessageCircle;
+    if (lower.includes("share") || lower.includes("retweet")) return Share2;
     return TrendingUp;
   };
 
@@ -60,7 +94,9 @@ export function AnalyticsView() {
   const calculateChange = (data: Array<{ total: number; date: string }>) => {
     if (data.length < 2) return 0;
     const recent = data.slice(-7).reduce((sum, item) => sum + item.total, 0);
-    const previous = data.slice(-14, -7).reduce((sum, item) => sum + item.total, 0);
+    const previous = data
+      .slice(-14, -7)
+      .reduce((sum, item) => sum + item.total, 0);
     if (previous === 0) return 0;
     return ((recent - previous) / previous) * 100;
   };
@@ -68,7 +104,7 @@ export function AnalyticsView() {
   if (integrationsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-gray-300 dark:border-white/20 border-t-blue-600 dark:border-t-white rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -76,191 +112,249 @@ export function AnalyticsView() {
   if (socialIntegrations.length === 0) {
     return (
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-gray-900 dark:text-white text-3xl font-semibold mb-8">Analytics</h1>
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-12 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800/30 flex items-center justify-center">
-            <TrendingUp className="text-gray-400 dark:text-gray-600" size={32} />
-          </div>
-          <h3 className="text-gray-900 dark:text-white text-lg font-medium mb-2">No Connected Accounts</h3>
-          <p className="text-gray-600 dark:text-gray-400 text-sm">
-            Connect a social media account to view analytics
-          </p>
-        </div>
+        <h1 className="text-3xl font-semibold mb-8">Analytics</h1>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+              <TrendingUp className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <CardTitle className="text-lg mb-2">
+              No Connected Accounts
+            </CardTitle>
+            <CardDescription>
+              Connect a social media account to view analytics
+            </CardDescription>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-gray-900 dark:text-white text-3xl font-semibold">Analytics</h1>
-        <div className="flex gap-3">
-          <div className="flex gap-2 bg-gray-100 dark:bg-gray-900 rounded-lg p-1 border border-gray-200 dark:border-gray-800/50">
+    <TooltipProvider>
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-semibold">Analytics</h1>
+          <div className="flex gap-2 p-1 bg-muted rounded-lg">
             {[7, 30, 90].map((days) => (
-              <button
+              <Button
                 key={days}
+                variant={period === days ? "default" : "ghost"}
+                size="sm"
                 onClick={() => setPeriod(days)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${period === days
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
               >
                 {days}d
-              </button>
+              </Button>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Integration selector */}
-      <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
-        {socialIntegrations.map((integration) => (
-          <button
-            key={integration.id}
-            onClick={() => setSelectedIntegration(integration.id)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all flex-shrink-0 ${selectedIntegration === integration.id
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white border-gray-200 dark:border-gray-800/50 hover:border-gray-300 dark:hover:border-gray-700'
-              }`}
-          >
-            <img
-              src={integration.picture}
-              alt={integration.name}
-              className="w-8 h-8 rounded-full"
-            />
-            <div className="text-left">
-              <div className="font-medium text-sm">{integration.name}</div>
-              <div className={`text-xs capitalize ${selectedIntegration === integration.id ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
-                }`}>
-                {integration.providerIdentifier}
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {/* Analytics content */}
-      {loading ? (
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="w-8 h-8 border-4 border-gray-300 dark:border-white/20 border-t-blue-600 dark:border-t-white rounded-full animate-spin"></div>
-        </div>
-      ) : analytics ? (
-        <div className="space-y-6">
-          {/* Metrics grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {analytics.analytics.map((metric, index) => {
-              const Icon = getMetricIcon(metric.label);
-              const total = calculateTotal(metric.data);
-              const change = calculateChange(metric.data);
-              const isPositive = change >= 0;
-
-              return (
+        {/* Integration selector */}
+        <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
+          {socialIntegrations.map((integration) => (
+            <Button
+              key={integration.id}
+              variant={
+                selectedIntegration === integration.id ? "default" : "outline"
+              }
+              onClick={() => setSelectedIntegration(integration.id)}
+              className="flex items-center gap-3 h-auto py-3 flex-shrink-0"
+            >
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={integration.picture} alt={integration.name} />
+                <AvatarFallback>
+                  {integration.name.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="text-left">
+                <div className="font-medium text-sm">{integration.name}</div>
                 <div
-                  key={index}
-                  className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-6 hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
+                  className={`text-xs capitalize ${
+                    selectedIntegration === integration.id
+                      ? "text-primary-foreground/70"
+                      : "text-muted-foreground"
+                  }`}
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                      <Icon className="text-gray-900 dark:text-white" size={20} />
-                    </div>
-                    {change !== 0 && (
-                      <div className={`flex items-center gap-1 text-xs font-medium ${isPositive ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'
-                        }`}>
-                        <TrendingUp size={14} className={!isPositive ? 'rotate-180' : ''} />
-                        {Math.abs(change).toFixed(1)}%
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
-                    {total.toLocaleString()}
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">{metric.label}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {analytics.analytics.map((metric, index) => (
-              <div
-                key={index}
-                className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-6"
-              >
-                <h3 className="text-gray-900 dark:text-white font-medium mb-4">{metric.label} Over Time</h3>
-                <div className="h-48 flex items-end gap-1">
-                  {metric.data.slice(-period).map((point, i) => {
-                    const maxValue = Math.max(...metric.data.map(d => d.total));
-                    const height = maxValue > 0 ? (point.total / maxValue) * 100 : 0;
-
-                    return (
-                      <div
-                        key={i}
-                        className="flex-1 bg-blue-200 dark:bg-white/10 hover:bg-blue-300 dark:hover:bg-white/20 rounded-t transition-all cursor-pointer group relative"
-                        style={{ height: `${height}%`, minHeight: '4px' }}
-                        title={`${new Date(point.date).toLocaleDateString()}: ${point.total}`}
-                      >
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 dark:bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                          {point.total.toLocaleString()}
-                          <div className="text-gray-400 text-[10px]">
-                            {new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex justify-between mt-4 text-xs text-gray-500 dark:text-gray-500">
-                  <span>{new Date(analytics.period.from).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                  <span>{new Date(analytics.period.to).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  {integration.providerIdentifier}
                 </div>
               </div>
-            ))}
-          </div>
+            </Button>
+          ))}
+        </div>
 
-          {/* Period info */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-4 flex items-center gap-3">
-            <Calendar className="text-gray-600 dark:text-gray-400" size={20} />
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Showing data from{' '}
-              <span className="text-gray-900 dark:text-white font-medium">
-                {new Date(analytics.period.from).toLocaleDateString()}
-              </span>
-              {' '}to{' '}
-              <span className="text-gray-900 dark:text-white font-medium">
-                {new Date(analytics.period.to).toLocaleDateString()}
-              </span>
+        {/* Analytics content */}
+        {loading ? (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin"></div>
+          </div>
+        ) : analytics ? (
+          <div className="space-y-6">
+            {/* Metrics grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {analytics.analytics.map((metric, index) => {
+                const Icon = getMetricIcon(metric.label);
+                const total = calculateTotal(metric.data);
+                const change = calculateChange(metric.data);
+                const isPositive = change >= 0;
+
+                return (
+                  <Card
+                    key={index}
+                    className="hover:border-primary/50 transition-colors"
+                  >
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        {change !== 0 && (
+                          <Badge
+                            variant="secondary"
+                            className={
+                              isPositive
+                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            }
+                          >
+                            <TrendingUp
+                              className={`h-3 w-3 mr-1 ${!isPositive ? "rotate-180" : ""}`}
+                            />
+                            {Math.abs(change).toFixed(1)}%
+                          </Badge>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold mb-1">
+                        {total.toLocaleString()}
+                      </div>
+                      <CardDescription>{metric.label}</CardDescription>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
+
+            {/* Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {analytics.analytics.map((metric, index) => (
+                <Card key={index}>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      {metric.label} Over Time
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-48 flex items-end gap-1">
+                      {metric.data.slice(-period).map((point, i) => {
+                        const maxValue = Math.max(
+                          ...metric.data.map((d) => d.total),
+                        );
+                        const height =
+                          maxValue > 0 ? (point.total / maxValue) * 100 : 0;
+
+                        return (
+                          <Tooltip key={i}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className="flex-1 bg-primary/20 hover:bg-primary/40 rounded-t transition-all cursor-pointer"
+                                style={{
+                                  height: `${height}%`,
+                                  minHeight: "4px",
+                                }}
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="font-medium">
+                                {point.total.toLocaleString()}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(point.date).toLocaleDateString(
+                                  "en-US",
+                                  {
+                                    month: "short",
+                                    day: "numeric",
+                                  },
+                                )}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-between mt-4 text-xs text-muted-foreground">
+                      <span>
+                        {new Date(analytics.period.from).toLocaleDateString(
+                          "en-US",
+                          { month: "short", day: "numeric" },
+                        )}
+                      </span>
+                      <span>
+                        {new Date(analytics.period.to).toLocaleDateString(
+                          "en-US",
+                          { month: "short", day: "numeric" },
+                        )}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Period info */}
+            <Card>
+              <CardContent className="flex items-center gap-3 py-4">
+                <Calendar className="h-5 w-5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  Showing data from{" "}
+                  <span className="font-medium text-foreground">
+                    {new Date(analytics.period.from).toLocaleDateString()}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-medium text-foreground">
+                    {new Date(analytics.period.to).toLocaleDateString()}
+                  </span>
+                </span>
+              </CardContent>
+            </Card>
           </div>
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800/50 p-12 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800/30 flex items-center justify-center">
-            <TrendingUp className="text-gray-400 dark:text-gray-600" size={32} />
-          </div>
-          <h3 className="text-gray-900 dark:text-white text-lg font-medium mb-2">No Analytics Available</h3>
-          <p className="text-gray-600 dark:text-gray-400 text-sm max-w-md mx-auto">
-            {selectedIntegration && socialIntegrations.find(i => i.id === selectedIntegration)?.providerIdentifier === 'linkedin' ? (
-              <>
-                LinkedIn does not provide analytics for personal profiles through their API.
-                Analytics are only available for company pages.
-                <br /><br />
-                To view your personal profile analytics, please visit{' '}
-                <a
-                  href="https://www.linkedin.com/analytics/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  LinkedIn Analytics
-                </a>
-              </>
-            ) : (
-              'Analytics data will appear here once available'
-            )}
-          </p>
-        </div>
-      )}
-    </div>
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                <TrendingUp className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <CardTitle className="text-lg mb-2">
+                No Analytics Available
+              </CardTitle>
+              <CardDescription className="max-w-md text-center">
+                {selectedIntegration &&
+                socialIntegrations.find((i) => i.id === selectedIntegration)
+                  ?.providerIdentifier === "linkedin" ? (
+                  <>
+                    LinkedIn does not provide analytics for personal profiles
+                    through their API. Analytics are only available for company
+                    pages.
+                    <br />
+                    <br />
+                    To view your personal profile analytics, please visit{" "}
+                    <a
+                      href="https://www.linkedin.com/analytics/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      LinkedIn Analytics
+                    </a>
+                  </>
+                ) : (
+                  "Analytics data will appear here once available"
+                )}
+              </CardDescription>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

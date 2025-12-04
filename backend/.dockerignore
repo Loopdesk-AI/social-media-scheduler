@@ -1,0 +1,61 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build output (will be built in container)
+dist
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Development files
+.git
+.gitignore
+.eslintrc*
+.prettierrc*
+*.md
+!README.md
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Testing
+coverage
+*.lcov
+__tests__
+*.test.ts
+*.spec.ts
+
+# Temporary files
+tmp
+temp
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads (should be mounted as volume)
+uploads/*
+!uploads/.gitkeep
+
+# Drizzle migrations (generated at runtime if needed)
+drizzle
+
+# Logs
+logs
+*.log
+
+# Debug files
+analytics_debug
+
+# Test files
+test-*.ts
