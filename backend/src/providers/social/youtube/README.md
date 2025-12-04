@@ -18,7 +18,7 @@ This provider enables OAuth authentication and video publishing to YouTube chann
 2. Click "Create Credentials" > "OAuth client ID"
 3. Select "Web application" as application type
 4. Add authorized redirect URIs:
-   - Development: `http://localhost:3001/api/integrations/youtube/callback`
+   - Development: `http://localhost:3000/api/integrations/youtube/callback`
    - Production: `https://yourdomain.com/api/integrations/youtube/callback`
 5. Note down your Client ID and Client Secret
 
@@ -38,7 +38,7 @@ This provider enables OAuth authentication and video publishing to YouTube chann
 ```env
 YOUTUBE_CLIENT_ID=your_client_id_here
 YOUTUBE_CLIENT_SECRET=your_client_secret_here
-BACKEND_URL=http://localhost:3001
+BACKEND_URL=http://localhost:3000
 ```
 
 ## API Documentation

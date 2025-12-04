@@ -18,7 +18,7 @@ This provider enables OAuth authentication and content publishing to LinkedIn pe
 ### 2. Configure OAuth Settings
 1. In app settings, go to "Auth" tab
 2. Add redirect URLs:
-   - Development: `http://localhost:3001/api/integrations/linkedin/callback`
+   - Development: `http://localhost:3000/api/integrations/linkedin/callback`
    - Production: `https://yourdomain.com/api/integrations/linkedin/callback`
 3. Request access to required products:
    - Sign In with LinkedIn
@@ -43,7 +43,7 @@ This provider enables OAuth authentication and content publishing to LinkedIn pe
 ```env
 LINKEDIN_CLIENT_ID=your_client_id_here
 LINKEDIN_CLIENT_SECRET=your_client_secret_here
-BACKEND_URL=http://localhost:3001
+BACKEND_URL=http://localhost:3000
 ```
 
 ## API Documentation

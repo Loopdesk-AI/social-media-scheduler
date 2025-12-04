@@ -230,7 +230,7 @@ deploy_with_pm2() {
 health_check() {
     print_header "Running Health Check"
 
-    local PORT=${PORT:-3001}
+    local PORT=${PORT:-3000}
     local MAX_RETRIES=30
     local RETRY_COUNT=0
 
@@ -414,8 +414,8 @@ main() {
     health_check
 
     print_header "Deployment Complete!"
-    echo -e "Application is running at: ${GREEN}http://localhost:${PORT:-3001}${NC}"
-    echo -e "Health check: ${GREEN}http://localhost:${PORT:-3001}/health${NC}"
+    echo -e "Application is running at: ${GREEN}http://localhost:${PORT:-3000}${NC}"
+    echo -e "Health check: ${GREEN}http://localhost:${PORT:-3000}/health${NC}"
 
     if [ "$DEPLOY_MODE" == "docker" ]; then
         echo -e "\nUseful commands:"

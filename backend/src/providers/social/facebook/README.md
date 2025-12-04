@@ -16,7 +16,7 @@ This provider enables OAuth authentication and content publishing to Facebook Pa
 2. Select "Facebook Login"
 3. Choose "Web" platform
 4. Add redirect URIs:
-   - Development: `http://localhost:3001/api/integrations/facebook/callback`
+   - Development: `http://localhost:3000/api/integrations/facebook/callback`
    - Production: `https://yourdomain.com/api/integrations/facebook/callback`
 
 ### 3. Configure Permissions
@@ -36,7 +36,7 @@ This provider enables OAuth authentication and content publishing to Facebook Pa
 ```env
 FACEBOOK_APP_ID=your_app_id_here
 FACEBOOK_APP_SECRET=your_app_secret_here
-BACKEND_URL=http://localhost:3001
+BACKEND_URL=http://localhost:3000
 ```
 
 ## API Documentation

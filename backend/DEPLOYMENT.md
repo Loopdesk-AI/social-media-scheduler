@@ -319,7 +319,7 @@ sudo certbot renew --dry-run
 ```bash
 # Core
 NODE_ENV=production
-PORT=3001
+PORT=3000
 FRONTEND_URL=https://your-frontend-domain.com
 BACKEND_URL=https://your-backend-domain.com
 
@@ -507,7 +507,7 @@ npm update
 docker compose logs backend
 
 # Check if port is in use
-sudo lsof -i :3001
+sudo lsof -i :3000
 
 # Rebuild container
 docker compose down
@@ -539,7 +539,7 @@ redis-cli -h $REDIS_HOST -p $REDIS_PORT --tls ping
 
 ```bash
 # Test locally
-curl http://localhost:3001/health
+curl http://localhost:3000/health
 
 # Check application logs
 docker compose logs backend --tail=50
@@ -552,7 +552,7 @@ docker compose exec backend env | grep -E "(DATABASE|REDIS)"
 
 ```bash
 # Check if backend is running
-curl http://localhost:3001/health
+curl http://localhost:3000/health
 
 # Check Nginx error logs
 sudo tail -f /var/log/nginx/error.log
