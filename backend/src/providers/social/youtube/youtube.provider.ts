@@ -347,8 +347,18 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
             totalSubscribers = parseInt(subscriberCount.toString(), 10);
           }
         }
-      } catch (channelError) {
+      } catch (channelError: any) {
         console.warn("Failed to fetch total subscriber count:", channelError);
+        // Re-throw 401 authentication errors so the controller can handle token refresh
+        if (
+          channelError.code === 401 ||
+          channelError.status === 401 ||
+          channelError.response?.status === 401 ||
+          channelError.message?.includes("Invalid Credentials") ||
+          channelError.message?.includes("invalid_token")
+        ) {
+          throw channelError;
+        }
       }
 
       // Calculate date range based on days parameter
@@ -426,6 +436,17 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       ];
     } catch (error: any) {
       console.error("YouTube analytics error:", error);
+
+      // Re-throw 401 authentication errors so the controller can handle token refresh
+      if (
+        error.code === 401 ||
+        error.status === 401 ||
+        error.response?.status === 401 ||
+        error.message?.includes("Invalid Credentials") ||
+        error.message?.includes("invalid_token")
+      ) {
+        throw error;
+      }
 
       // Check if it's an API not enabled error
       if (

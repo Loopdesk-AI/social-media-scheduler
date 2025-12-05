@@ -117,8 +117,19 @@ class IntegrationService {
         codeVerifier: "", // Not used for server-side flow
       });
 
+      // Log token details for debugging
+      console.log(`🔐 OAuth callback for ${provider}:`);
+      console.log(
+        `   - Access token received: ${authDetails.accessToken ? "Yes" : "No"}`,
+      );
+      console.log(
+        `   - Refresh token received: ${authDetails.refreshToken ? "Yes" : "No"}`,
+      );
+      console.log(`   - Token expires in: ${authDetails.expiresIn} seconds`);
+
       // Encrypt tokens
       const encryptedToken = encrypt(authDetails.accessToken);
+      // Only encrypt refresh token if we got a new one (Google only sends it on first auth)
       const encryptedRefreshToken = authDetails.refreshToken
         ? encrypt(authDetails.refreshToken)
         : null;
@@ -140,13 +151,31 @@ class IntegrationService {
       let integration;
       if (existingIntegration) {
         // Update existing integration
+        // IMPORTANT: Preserve existing refresh token if Google didn't send a new one
+        // Google only returns refresh_token on the FIRST authorization, not on subsequent ones
+        const refreshTokenToStore =
+          encryptedRefreshToken || existingIntegration.refreshToken;
+
+        console.log(
+          `   - Existing refresh token in DB: ${existingIntegration.refreshToken ? "Yes" : "No"}`,
+        );
+        console.log(
+          `   - Using refresh token: ${refreshTokenToStore ? "Yes (preserved or new)" : "No (PROBLEM!)"}`,
+        );
+
+        if (!refreshTokenToStore) {
+          console.warn(
+            `⚠️  WARNING: No refresh token available for ${provider}. Token refresh will fail!`,
+          );
+        }
+
         const [updated] = await db
           .update(integrations)
           .set({
             name: authDetails.name,
             picture: authDetails.picture,
             token: encryptedToken,
-            refreshToken: encryptedRefreshToken,
+            refreshToken: refreshTokenToStore,
             tokenExpiration,
             disabled: false,
             refreshNeeded: false,
@@ -164,6 +193,12 @@ class IntegrationService {
         );
       } else {
         // Create new integration
+        if (!encryptedRefreshToken) {
+          console.warn(
+            `⚠️  WARNING: No refresh token received for new ${provider} integration. Token refresh will fail!`,
+          );
+        }
+
         const [created] = await db
           .insert(integrations)
           .values({
@@ -382,9 +417,32 @@ class IntegrationService {
 
     // Encrypt new tokens
     const encryptedToken = encrypt(authDetails.accessToken);
+    // Only encrypt refresh token if we got a new one (Google only sends it on first auth)
     const encryptedRefreshToken = authDetails.refreshToken
       ? encrypt(authDetails.refreshToken)
       : null;
+
+    // IMPORTANT: Preserve existing refresh token if provider didn't send a new one
+    // Google only returns refresh_token on the FIRST authorization, not on subsequent ones
+    const refreshTokenToStore =
+      encryptedRefreshToken || integration.refreshToken;
+
+    console.log(`🔄 Reconnecting integration ${integration.name}:`);
+    console.log(
+      `   - New refresh token received: ${authDetails.refreshToken ? "Yes" : "No"}`,
+    );
+    console.log(
+      `   - Existing refresh token in DB: ${integration.refreshToken ? "Yes" : "No"}`,
+    );
+    console.log(
+      `   - Using refresh token: ${refreshTokenToStore ? "Yes (preserved or new)" : "No (PROBLEM!)"}`,
+    );
+
+    if (!refreshTokenToStore) {
+      console.warn(
+        `⚠️  WARNING: No refresh token available after reconnect. Token refresh will fail!`,
+      );
+    }
 
     // Calculate expiration
     const tokenExpiration = dayjs()
@@ -396,7 +454,7 @@ class IntegrationService {
       .update(integrations)
       .set({
         token: encryptedToken,
-        refreshToken: encryptedRefreshToken,
+        refreshToken: refreshTokenToStore,
         tokenExpiration,
         refreshNeeded: false,
         updatedAt: new Date(),
@@ -440,13 +498,37 @@ class IntegrationService {
     let integration;
     if (existingIntegration) {
       // Update existing integration
+      // IMPORTANT: Preserve existing refresh token if provider didn't send a new one
+      // Google only returns refresh_token on the FIRST authorization, not on subsequent ones
+      const refreshTokenToStore =
+        encryptedRefreshToken || existingIntegration.refreshToken;
+
+      console.log(
+        `🔄 Updating storage integration ${existingIntegration.name}:`,
+      );
+      console.log(
+        `   - New refresh token received: ${authDetails.refreshToken ? "Yes" : "No"}`,
+      );
+      console.log(
+        `   - Existing refresh token in DB: ${existingIntegration.refreshToken ? "Yes" : "No"}`,
+      );
+      console.log(
+        `   - Using refresh token: ${refreshTokenToStore ? "Yes (preserved or new)" : "No (PROBLEM!)"}`,
+      );
+
+      if (!refreshTokenToStore) {
+        console.warn(
+          `⚠️  WARNING: No refresh token available for storage integration. Token refresh will fail!`,
+        );
+      }
+
       const [updated] = await db
         .update(integrations)
         .set({
           name: authDetails.name,
           picture: authDetails.picture,
           token: encryptedToken,
-          refreshToken: encryptedRefreshToken,
+          refreshToken: refreshTokenToStore,
           tokenExpiration,
           disabled: false,
           refreshNeeded: false,
@@ -464,6 +546,12 @@ class IntegrationService {
       );
     } else {
       // Create new integration
+      if (!encryptedRefreshToken) {
+        console.warn(
+          `⚠️  WARNING: No refresh token received for new storage integration. Token refresh will fail!`,
+        );
+      }
+
       const [created] = await db
         .insert(integrations)
         .values({

@@ -69,10 +69,14 @@ export class AnalyticsController {
         );
       } catch (error: any) {
         // Check if it's an authentication error and try to refresh the token
-        if (
+        const isAuthError =
           error.code === 401 ||
-          (error.message && error.message.includes("Invalid Credentials"))
-        ) {
+          error.status === 401 ||
+          error.response?.status === 401 ||
+          error.message?.includes("Invalid Credentials") ||
+          error.message?.includes("invalid_token");
+
+        if (isAuthError) {
           console.log("Attempting to refresh token");
           try {
             // Try to refresh the token
@@ -104,13 +108,29 @@ export class AnalyticsController {
             } else {
               throw new Error("No refresh token available");
             }
-          } catch (refreshError) {
+          } catch (refreshError: any) {
             console.error("Failed to refresh token:", refreshError);
             // Mark integration as needing refresh
             await db
               .update(integrations)
               .set({ refreshNeeded: true })
               .where(eq(integrations.id, integrationId));
+
+            // Check if it's an invalid_grant error (refresh token revoked/expired)
+            const isInvalidGrant =
+              refreshError.response?.data?.error === "invalid_grant" ||
+              refreshError.message?.includes("invalid_grant");
+
+            if (isInvalidGrant) {
+              return res.status(401).json({
+                error: "Re-authentication required",
+                message:
+                  "Your YouTube authorization has expired or been revoked. Please disconnect and reconnect your YouTube account.",
+                refreshNeeded: true,
+                requiresReauth: true,
+              });
+            }
+
             throw new Error("Token refresh required");
           }
         } else {
@@ -145,7 +165,8 @@ export class AnalyticsController {
         if (
           error.message.includes("token") ||
           error.message.includes("access") ||
-          error.message.includes("blocked")
+          error.message.includes("blocked") ||
+          error.message.includes("invalid_grant")
         ) {
           // Mark integration as needing refresh
           try {
@@ -162,9 +183,11 @@ export class AnalyticsController {
           }
 
           return res.status(401).json({
-            error: "Token refresh required",
-            message: "Please re-authenticate your account",
+            error: "Re-authentication required",
+            message:
+              "Your social media authorization has expired or been revoked. Please disconnect and reconnect your account.",
             refreshNeeded: true,
+            requiresReauth: true,
           });
         }
       }
