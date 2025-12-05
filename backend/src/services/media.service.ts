@@ -4,11 +4,35 @@ import { eq, and, isNull, desc } from "drizzle-orm";
 import { storage } from "../storage/storage.factory";
 import { randomBytes } from "crypto";
 import { join } from "path";
-import { unlink } from "fs/promises";
+import { unlink, access, constants } from "fs/promises";
 import { exec } from "child_process";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
+
+/**
+ * Check if ffmpeg is available on the system
+ */
+async function isFfmpegAvailable(): Promise<boolean> {
+  try {
+    await execAsync("ffmpeg -version");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a file exists
+ */
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export class MediaService {
   /**
@@ -94,19 +118,58 @@ export class MediaService {
     videoPath: string,
     userId: string,
   ): Promise<string> {
+    // Check if ffmpeg is available
+    const ffmpegAvailable = await isFfmpegAvailable();
+    if (!ffmpegAvailable) {
+      console.warn(
+        "⚠️  ffmpeg is not installed. Video thumbnails will not be generated.",
+      );
+      console.warn(
+        "   Install ffmpeg: brew install ffmpeg (macOS) or apt-get install ffmpeg (Linux)",
+      );
+      throw new Error("ffmpeg is not installed");
+    }
+
+    // Check if video file exists
+    const videoExists = await fileExists(videoPath);
+    if (!videoExists) {
+      throw new Error(`Video file not found: ${videoPath}`);
+    }
+
     const thumbnailFilename = `${randomBytes(16).toString("hex")}.jpg`;
     const thumbnailPath = join("/tmp", thumbnailFilename);
     const destination = join(userId, "thumbnails", thumbnailFilename);
 
-    // Use ffmpeg to extract frame at 1 second
+    // Use ffmpeg to extract frame at 1 second (or 0 if video is too short)
+    // -y: overwrite output file without asking
+    // -ss 00:00:00.5: seek to 0.5 seconds (works better for short videos)
+    // -vframes 1: extract only 1 frame
+    // -q:v 2: high quality JPEG
     try {
       await execAsync(
-        `ffmpeg -i "${videoPath}" -ss 00:00:01 -vframes 1 -q:v 2 "${thumbnailPath}"`,
+        `ffmpeg -y -i "${videoPath}" -ss 00:00:00.5 -vframes 1 -q:v 2 "${thumbnailPath}" 2>&1`,
       );
-    } catch (error) {
-      // If ffmpeg fails, try using sharp with first frame
-      // This is a fallback and may not work for all video formats
-      throw new Error("Failed to generate video thumbnail");
+    } catch (error: any) {
+      console.error("ffmpeg error:", error.message || error);
+      // Try again at the very beginning of the video
+      try {
+        await execAsync(
+          `ffmpeg -y -i "${videoPath}" -vframes 1 -q:v 2 "${thumbnailPath}" 2>&1`,
+        );
+      } catch (retryError: any) {
+        console.error("ffmpeg retry error:", retryError.message || retryError);
+        throw new Error(
+          `Failed to generate video thumbnail: ${retryError.message || "ffmpeg failed"}`,
+        );
+      }
+    }
+
+    // Verify thumbnail was created
+    const thumbnailExists = await fileExists(thumbnailPath);
+    if (!thumbnailExists) {
+      throw new Error(
+        `Thumbnail file was not created at ${thumbnailPath}. ffmpeg may have failed silently.`,
+      );
     }
 
     // Upload thumbnail
