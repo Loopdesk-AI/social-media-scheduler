@@ -62,6 +62,11 @@ TIKTOK_CLIENT_KEY=
 TIKTOK_CLIENT_SECRET=
 
 # Google Drive OAuth
+# Note: If not set, Google Drive will fall back to using YOUTUBE_CLIENT_ID/SECRET
+# Both services can share the same Google OAuth client, but you must add BOTH redirect URIs
+# to your Google Cloud Console OAuth client:
+#   - http://localhost:3000/api/integrations/youtube/callback
+#   - http://localhost:3000/api/storage/callback/google-drive
 GOOGLE_DRIVE_CLIENT_ID=
 GOOGLE_DRIVE_CLIENT_SECRET=
 GOOGLE_DRIVE_REDIRECT_URI=

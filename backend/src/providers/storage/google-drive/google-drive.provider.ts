@@ -54,8 +54,13 @@ export class GoogleDriveProvider extends BaseStorageProvider {
   }
 
   private initializeOAuthClient(): void {
-    const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
+    // Use YouTube OAuth credentials (same Google Cloud project) for Google Drive
+    // This allows both YouTube and Google Drive to use the same OAuth client
+    const clientId =
+      process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.YOUTUBE_CLIENT_ID;
+    const clientSecret =
+      process.env.GOOGLE_DRIVE_CLIENT_SECRET ||
+      process.env.YOUTUBE_CLIENT_SECRET;
     const redirectUri =
       process.env.GOOGLE_DRIVE_REDIRECT_URI ||
       `${process.env.BACKEND_URL || "http://localhost:3000"}/api/storage/callback/google-drive`;
@@ -64,10 +69,14 @@ export class GoogleDriveProvider extends BaseStorageProvider {
       clientId: !!clientId,
       clientSecret: !!clientSecret,
       redirectUri,
+      usingYouTubeCredentials:
+        !process.env.GOOGLE_DRIVE_CLIENT_ID && !!process.env.YOUTUBE_CLIENT_ID,
     });
 
     if (!clientId || !clientSecret) {
-      throw new Error("Google Drive environment variables not configured");
+      throw new Error(
+        "Google Drive environment variables not configured. Set GOOGLE_DRIVE_CLIENT_ID/SECRET or YOUTUBE_CLIENT_ID/SECRET",
+      );
     }
 
     this.oauth2Client = new google.auth.OAuth2(

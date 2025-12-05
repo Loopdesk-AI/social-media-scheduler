@@ -38,41 +38,27 @@ export class StorageController {
   async getAuthUrl(req: Request, res: Response) {
     try {
       const { provider } = req.params;
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
       console.log(`🔐 Auth URL request for ${provider}, user ID: ${userId}`);
 
-      // For backward compatibility, if no user ID, use the old method
-      if (!userId) {
-        console.log(
-          `⚠️  No user ID found for ${provider}, using deprecated method`,
-        );
-        // Get the provider
-        const providers = this.storageService.getProviders();
-        const providerInfo = providers.find((p) => p.identifier === provider);
+      // Verify provider exists
+      const providers = this.storageService.getProviders();
+      const providerInfo = providers.find((p) => p.identifier === provider);
 
-        if (!providerInfo) {
-          return res.status(404).json({
-            error: "Provider not found",
-            message: `Storage provider ${provider} not found`,
-          });
-        }
-
-        // Get the actual OAuth URL from the storage service
-        const authData = await this.storageService.getAuthUrl(provider);
-
-        res.json(authData);
-      } else {
-        console.log(
-          `✅ User ID found for ${provider}: ${userId}, using state management`,
-        );
-        // Generate auth URL with state management
-        const authData = await this.storageService.generateAuthUrl(
-          provider,
-          userId,
-        );
-        res.json(authData);
+      if (!providerInfo) {
+        return res.status(404).json({
+          error: "Provider not found",
+          message: `Storage provider ${provider} not found`,
+        });
       }
+
+      // Generate auth URL with state management
+      const authData = await this.storageService.generateAuthUrl(
+        provider,
+        userId,
+      );
+      res.json(authData);
     } catch (error) {
       console.error("Failed to generate auth URL:", error);
       res.status(500).json({
