@@ -58,7 +58,7 @@ class RedisService {
             return delay;
           },
           enableReadyCheck: true,
-          scaleReads: "replica", // Read from replicas when possible
+          scaleReads: "slave", // Read from replicas when possible
           natMap: {}, // Empty natMap for AWS ElastiCache
         });
       } else {
