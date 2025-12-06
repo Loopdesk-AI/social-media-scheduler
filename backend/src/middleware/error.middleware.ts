@@ -92,6 +92,26 @@ export function errorMiddleware(
     });
   }
 
+  // Drizzle query errors (wraps underlying pg errors)
+  if (error.message && error.message.startsWith("Failed query:")) {
+    logger.error("Drizzle query failed:", {
+      message: error.message,
+      cause: (error as any).cause,
+      stack: error.stack,
+    });
+    return res.status(500).json({
+      error: "InternalServerError",
+      message:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Database query failed",
+      hint:
+        process.env.NODE_ENV === "development"
+          ? "Check if database schema is synced (npm run db:push) and default user exists (npm run db:seed)"
+          : undefined,
+    });
+  }
+
   // PostgreSQL/pg errors (Drizzle uses node-postgres under the hood)
   // Common pg error codes: https://www.postgresql.org/docs/current/errcodes-appendix.html
   const pgError = error as any;

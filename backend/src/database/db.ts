@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import * as schema from "./schema";
 
 // Create a PostgreSQL connection pool for cloud-hosted postgres (Neon)
+// Neon databases on free tier go to sleep after inactivity and need time to wake up
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -10,7 +11,12 @@ const pool = new Pool({
   },
   max: 20, // Maximum number of connections in the pool
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 30000, // Increased from 5s to 30s for Neon cold start
+});
+
+// Log connection errors
+pool.on("error", (err) => {
+  console.error("Unexpected error on idle database client:", err);
 });
 
 // Create Drizzle instance with schema
