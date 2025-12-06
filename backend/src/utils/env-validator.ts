@@ -56,7 +56,7 @@ const ENV_VALIDATIONS: EnvValidation[] = [
   {
     name: "REDIS_PASSWORD",
     required: false,
-    silent: true, // Password is optional - Redis can be accessed without auth
+    silent: true, // Password is optional - Redis can be accessed without authentication
   },
 
   // Encryption
