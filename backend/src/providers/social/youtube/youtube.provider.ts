@@ -301,16 +301,40 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       ];
     } catch (error: any) {
       // Handle YouTube-specific errors
-      const errorBody = error.response?.data
-        ? JSON.stringify(error.response.data)
-        : error.message;
+      let errorBody: string;
+      try {
+        // Safely extract error information without circular references
+        if (error.response?.data) {
+          // For axios errors, extract just the data portion
+          const data = error.response.data;
+          if (typeof data === "string") {
+            errorBody = data;
+          } else if (typeof data === "object") {
+            // Create a safe copy without circular references
+            errorBody = JSON.stringify({
+              error: data.error,
+              message: data.message || data.error?.message,
+              code: data.code || error.response.status,
+            });
+          } else {
+            errorBody = String(data);
+          }
+        } else {
+          errorBody = error.message || "Unknown error";
+        }
+      } catch (stringifyError) {
+        // If JSON.stringify fails due to circular references, use message
+        errorBody = error.message || "Error occurred during video upload";
+      }
+
       const mappedError = this.handleErrors(errorBody);
 
       if (mappedError) {
         throw new Error(mappedError.value);
       }
 
-      throw error;
+      // Throw a clean error without circular references
+      throw new Error(errorBody);
     }
   }
 

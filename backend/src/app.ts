@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import { join } from "path";
 import { integrationsRoutes } from "./routes/integrations.routes";
 import { postsRoutes } from "./routes/posts.routes";
 import { mediaRoutes } from "./routes/media.routes";
@@ -50,6 +51,11 @@ if (
   const { serverAdapter } = require("./monitoring/bull-board");
   app.use("/admin/queues", serverAdapter.getRouter());
 }
+
+// Serve static files from uploads directory
+const uploadsDir =
+  process.env.STORAGE_LOCAL_PATH || join(process.cwd(), "uploads");
+app.use("/uploads", express.static(uploadsDir));
 
 // API routes
 app.use("/api/integrations", integrationsRoutes);
