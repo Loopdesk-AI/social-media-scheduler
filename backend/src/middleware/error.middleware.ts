@@ -7,7 +7,6 @@ import {
   UnauthorizedError,
   NotFoundError,
 } from "../utils/errors";
-import { sentryService } from "../monitoring/sentry.service";
 import logger from "../utils/logger";
 
 /**
@@ -26,23 +25,6 @@ export function errorMiddleware(
     path: req.path,
     method: req.method,
   });
-
-  // Capture in Sentry for 5xx errors
-  if (
-    !(error instanceof RefreshToken) &&
-    !(error instanceof BadBody) &&
-    !(error instanceof NotEnoughScopes) &&
-    !(error instanceof ValidationError) &&
-    !(error instanceof UnauthorizedError) &&
-    !(error instanceof NotFoundError)
-  ) {
-    sentryService.captureException(error, {
-      path: req.path,
-      method: req.method,
-      body: req.body,
-      query: req.query,
-    });
-  }
 
   // Refresh token required
   if (error instanceof RefreshToken) {
