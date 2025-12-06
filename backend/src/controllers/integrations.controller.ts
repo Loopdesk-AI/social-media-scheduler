@@ -1,6 +1,9 @@
-import { Request, Response, NextFunction } from 'express';
-import { integrationService } from '../services/integration.service';
-import { integrationManager } from '../providers/integration.manager';
+import { Request, Response, NextFunction } from "express";
+import { integrationService } from "../services/integration.service";
+import { integrationManager } from "../providers/integration.manager";
+
+// Default user ID for simplified operation (no auth)
+const DEFAULT_USER_ID = "default-user";
 
 export class IntegrationsController {
   /**
@@ -23,12 +26,9 @@ export class IntegrationsController {
   async generateAuthUrl(req: Request, res: Response, next: NextFunction) {
     try {
       const { provider } = req.params;
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
 
-      const result = await integrationService.generateAuthUrl(
-        provider,
-        userId
-      );
+      const result = await integrationService.generateAuthUrl(provider, userId);
 
       res.json(result);
     } catch (error) {
@@ -49,26 +49,33 @@ export class IntegrationsController {
 
       if (!code || !state) {
         // Redirect to frontend with error
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        const { provider } = req.params;
-        return res.redirect(`${frontendUrl}/integrations/social/${provider}?error=missing_params`);
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+        return res.redirect(
+          `${frontendUrl}/integrations/social/${provider}?error=missing_params`,
+        );
       }
 
       const result = await integrationService.handleOAuthCallback(
         provider,
         code as string,
-        state as string
+        state as string,
       );
 
       // Redirect to frontend OAuth callback route with success
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      res.redirect(`${frontendUrl}/integrations/social/${provider}?integration=success`);
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      res.redirect(
+        `${frontendUrl}/integrations/social/${provider}?integration=success`,
+      );
     } catch (error: any) {
       // Redirect to frontend with error
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
       const { provider } = req.params;
-      const errorMessage = encodeURIComponent(error.message || 'Integration failed');
-      res.redirect(`${frontendUrl}/integrations/social/${provider}?error=${errorMessage}`);
+      const errorMessage = encodeURIComponent(
+        error.message || "Integration failed",
+      );
+      res.redirect(
+        `${frontendUrl}/integrations/social/${provider}?error=${errorMessage}`,
+      );
     }
   }
 
@@ -78,7 +85,7 @@ export class IntegrationsController {
    */
   async listIntegrations(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const integrations = await integrationService.listIntegrations(userId);
       res.json(integrations);
     } catch (error) {
@@ -93,7 +100,7 @@ export class IntegrationsController {
   async getIntegration(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const integration = await integrationService.getIntegration(id, userId);
       res.json(integration);
     } catch (error) {
@@ -108,7 +115,7 @@ export class IntegrationsController {
   async deleteIntegration(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const result = await integrationService.deleteIntegration(id, userId);
       res.json(result);
     } catch (error) {
@@ -123,7 +130,7 @@ export class IntegrationsController {
   async toggleIntegration(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const result = await integrationService.toggleIntegration(id, userId);
       res.json(result);
     } catch (error) {
@@ -139,11 +146,11 @@ export class IntegrationsController {
     try {
       const { id } = req.params;
       const { code } = req.body;
-      const userId = req.user!.id;
+      const userId = DEFAULT_USER_ID;
       const result = await integrationService.reconnectIntegration(
         id,
         code,
-        userId
+        userId,
       );
       res.json(result);
     } catch (error) {
@@ -158,12 +165,13 @@ export class IntegrationsController {
   async addTestIntegration(req: Request, res: Response, next: NextFunction) {
     try {
       // Only allow in development environment
-      if (process.env.NODE_ENV !== 'development') {
-        return res.status(403).json({ error: 'Forbidden' });
+      if (process.env.NODE_ENV !== "development") {
+        return res.status(403).json({ error: "Forbidden" });
       }
 
-      const userId = req.user!.id;
-      const { provider, accessToken, name, internalId, picture, username } = req.body;
+      const userId = DEFAULT_USER_ID;
+      const { provider, accessToken, name, internalId, picture, username } =
+        req.body;
 
       const result = await integrationService.addTestIntegration(
         provider,
@@ -172,7 +180,7 @@ export class IntegrationsController {
         name,
         internalId,
         picture,
-        username
+        username,
       );
 
       res.json(result);

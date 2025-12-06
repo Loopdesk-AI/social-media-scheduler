@@ -1,0 +1,57 @@
+[Unit]
+Description=Social Media Scheduler Backend
+Documentation=https://github.com/your-username/social-media-scheduler
+After=network.target
+
+[Service]
+Type=simple
+User=nodejs
+Group=nodejs
+WorkingDirectory=/opt/social-media-backend
+
+# Environment
+Environment=NODE_ENV=production
+Environment=PORT=3000
+EnvironmentFile=/opt/social-media-backend/.env
+
+# Node.js application
+ExecStart=/usr/bin/node dist/index.js
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Graceful shutdown
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+
+# Allow write access to specific directories
+ReadWritePaths=/opt/social-media-backend/uploads
+ReadWritePaths=/opt/social-media-backend/logs
+
+# Resource limits
+LimitNOFILE=65535
+MemoryMax=512M
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=social-media-backend
+
+[Install]
+WantedBy=multi-user.target

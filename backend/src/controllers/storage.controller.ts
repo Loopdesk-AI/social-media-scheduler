@@ -1,7 +1,10 @@
-import { Request, Response } from 'express';
-import { StorageService } from '../services/storage.service';
-import { integrationService } from '../services/integration.service';
-import { decrypt } from '../services/encryption.service';
+import { Request, Response } from "express";
+import { StorageService } from "../services/storage.service";
+import { integrationService } from "../services/integration.service";
+import { decrypt } from "../services/encryption.service";
+
+// Default user ID for simplified operation (no auth)
+const DEFAULT_USER_ID = "default-user";
 
 export class StorageController {
   private storageService: StorageService;
@@ -22,8 +25,8 @@ export class StorageController {
       res.json(providers);
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to retrieve storage providers',
-        message: (error as Error).message
+        error: "Failed to retrieve storage providers",
+        message: (error as Error).message,
       });
     }
   }
@@ -35,39 +38,32 @@ export class StorageController {
   async getAuthUrl(req: Request, res: Response) {
     try {
       const { provider } = req.params;
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
       console.log(`🔐 Auth URL request for ${provider}, user ID: ${userId}`);
 
-      // For backward compatibility, if no user ID, use the old method
-      if (!userId) {
-        console.log(`⚠️  No user ID found for ${provider}, using deprecated method`);
-        // Get the provider
-        const providers = this.storageService.getProviders();
-        const providerInfo = providers.find(p => p.identifier === provider);
+      // Verify provider exists
+      const providers = this.storageService.getProviders();
+      const providerInfo = providers.find((p) => p.identifier === provider);
 
-        if (!providerInfo) {
-          return res.status(404).json({
-            error: 'Provider not found',
-            message: `Storage provider ${provider} not found`
-          });
-        }
-
-        // Get the actual OAuth URL from the storage service
-        const authData = await this.storageService.getAuthUrl(provider);
-
-        res.json(authData);
-      } else {
-        console.log(`✅ User ID found for ${provider}: ${userId}, using state management`);
-        // Generate auth URL with state management
-        const authData = await this.storageService.generateAuthUrl(provider, userId);
-        res.json(authData);
+      if (!providerInfo) {
+        return res.status(404).json({
+          error: "Provider not found",
+          message: `Storage provider ${provider} not found`,
+        });
       }
+
+      // Generate auth URL with state management
+      const authData = await this.storageService.generateAuthUrl(
+        provider,
+        userId,
+      );
+      res.json(authData);
     } catch (error) {
-      console.error('Failed to generate auth URL:', error);
+      console.error("Failed to generate auth URL:", error);
       res.status(500).json({
-        error: 'Failed to generate auth URL',
-        message: (error as Error).message
+        error: "Failed to generate auth URL",
+        message: (error as Error).message,
       });
     }
   }
@@ -81,17 +77,17 @@ export class StorageController {
       const { provider } = req.params;
       const { code, state } = req.query;
 
-      if (!code || typeof code !== 'string') {
+      if (!code || typeof code !== "string") {
         return res.status(400).json({
-          error: 'Invalid request',
-          message: 'Authorization code is required'
+          error: "Invalid request",
+          message: "Authorization code is required",
         });
       }
 
-      if (!state || typeof state !== 'string') {
+      if (!state || typeof state !== "string") {
         return res.status(400).json({
-          error: 'Invalid request',
-          message: 'State parameter is required'
+          error: "Invalid request",
+          message: "State parameter is required",
         });
       }
 
@@ -99,7 +95,7 @@ export class StorageController {
       const userId = await this.storageService.getUserIdFromState(state);
 
       if (!userId) {
-        throw new Error('Invalid OAuth state: user session not found');
+        throw new Error("Invalid OAuth state: user session not found");
       }
 
       // Get the provider
@@ -107,23 +103,26 @@ export class StorageController {
 
       // Authenticate with the provider using the code
       const authDetails = await storageProvider.authenticate({
-        code
+        code,
       });
 
       // Create or update the integration in the database
-      const integration = await this.integrationService.createOrUpdateStorageIntegration(
-        userId,
-        provider,
-        authDetails
-      );
+      const integration =
+        await this.integrationService.createOrUpdateStorageIntegration(
+          userId,
+          provider,
+          authDetails,
+        );
 
       // Redirect back to the frontend with success
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
       res.redirect(`${frontendUrl}/?connected=true&provider=${provider}`);
     } catch (error) {
-      console.error('Storage callback error:', error);
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      res.redirect(`${frontendUrl}/?error=connection_failed&message=${encodeURIComponent((error as Error).message)}&provider=${req.params.provider}`);
+      console.error("Storage callback error:", error);
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      res.redirect(
+        `${frontendUrl}/?error=connection_failed&message=${encodeURIComponent((error as Error).message)}&provider=${req.params.provider}`,
+      );
     }
   }
 
@@ -133,19 +132,20 @@ export class StorageController {
    */
   async getIntegrations(req: Request, res: Response) {
     try {
-      const userId = (req as any).user.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
       // Get storage integrations for the user
-      const integrations = await this.integrationService.getIntegrationsByUserIdAndType(
-        userId,
-        'storage'
-      );
+      const integrations =
+        await this.integrationService.getIntegrationsByUserIdAndType(
+          userId,
+          "storage",
+        );
 
       res.json(integrations);
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to retrieve storage integrations',
-        message: (error as Error).message
+        error: "Failed to retrieve storage integrations",
+        message: (error as Error).message,
       });
     }
   }
@@ -157,22 +157,22 @@ export class StorageController {
   async deleteIntegration(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const userId = (req as any).user.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
       // Get the integration to verify ownership
       const integration = await this.integrationService.getIntegrationById(id);
 
       if (!integration) {
         return res.status(404).json({
-          error: 'Integration not found',
-          message: 'Storage integration not found'
+          error: "Integration not found",
+          message: "Storage integration not found",
         });
       }
 
       if (integration.userId !== userId) {
         return res.status(403).json({
-          error: 'Forbidden',
-          message: 'You do not have permission to delete this integration'
+          error: "Forbidden",
+          message: "You do not have permission to delete this integration",
         });
       }
 
@@ -181,12 +181,12 @@ export class StorageController {
 
       res.json({
         success: true,
-        message: 'Storage integration disconnected successfully'
+        message: "Storage integration disconnected successfully",
       });
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to disconnect storage integration',
-        message: (error as Error).message
+        error: "Failed to disconnect storage integration",
+        message: (error as Error).message,
       });
     }
   }
@@ -199,34 +199,41 @@ export class StorageController {
     try {
       const { integrationId } = req.params;
       const { folderId, pageToken } = req.query;
-      const userId = (req as any).user.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
-      console.log(`🔍 File listing request - Integration: ${integrationId}, User: ${userId}, Folder: ${folderId || 'root'}`);
+      console.log(
+        `🔍 File listing request - Integration: ${integrationId}, User: ${userId}, Folder: ${folderId || "root"}`,
+      );
 
       // Get the integration to verify ownership
-      const integration = await this.integrationService.getIntegrationById(integrationId);
+      const integration =
+        await this.integrationService.getIntegrationById(integrationId);
 
       if (!integration) {
         console.log(`❌ Integration not found: ${integrationId}`);
         return res.status(404).json({
-          error: 'Integration not found',
-          message: 'Storage integration not found'
+          error: "Integration not found",
+          message: "Storage integration not found",
         });
       }
 
-      console.log(`✅ Integration found: ${integration.name} (${integration.providerIdentifier})`);
+      console.log(
+        `✅ Integration found: ${integration.name} (${integration.providerIdentifier})`,
+      );
       console.log(`🔄 Integration details:`, {
         id: integration.id,
-        refreshToken: integration.refreshToken ? 'Present' : 'Missing',
+        refreshToken: integration.refreshToken ? "Present" : "Missing",
         tokenExpiration: integration.tokenExpiration,
-        refreshNeeded: integration.refreshNeeded
+        refreshNeeded: integration.refreshNeeded,
       });
 
       if (integration.userId !== userId) {
-        console.log(`❌ User mismatch - Integration user: ${integration.userId}, Request user: ${userId}`);
+        console.log(
+          `❌ User mismatch - Integration user: ${integration.userId}, Request user: ${userId}`,
+        );
         return res.status(403).json({
-          error: 'Forbidden',
-          message: 'You do not have permission to access this integration'
+          error: "Forbidden",
+          message: "You do not have permission to access this integration",
         });
       }
 
@@ -235,24 +242,26 @@ export class StorageController {
       const result = await this.storageService.listFiles(
         integration,
         folderId as string | undefined,
-        pageToken as string | undefined
+        pageToken as string | undefined,
       );
 
       console.log(`🔍 Storage service listFiles result:`, {
         fileCount: result.files.length,
         nextPageToken: result.nextPageToken,
-        sampleFiles: result.files.slice(0, 3)
+        sampleFiles: result.files.slice(0, 3),
       });
 
       // Transform backend StorageFile objects to match frontend expectations
-      const transformedFiles = result.files.map(file => {
+      const transformedFiles = result.files.map((file) => {
         // Format file size
         const formatFileSize = (bytes: number): string => {
-          if (bytes === 0) return '0 Bytes';
+          if (bytes === 0) return "0 Bytes";
           const k = 1024;
-          const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+          const sizes = ["Bytes", "KB", "MB", "GB"];
           const i = Math.floor(Math.log(bytes) / Math.log(k));
-          return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+          return (
+            parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+          );
         };
 
         const transformedFile = {
@@ -265,7 +274,7 @@ export class StorageController {
           thumbnailUrl: file.thumbnailLink,
           isFolder: file.isFolder,
           path: file.path || `/${file.name}`,
-          canSelect: !file.isFolder // Folders can't be selected, only files can
+          canSelect: !file.isFolder, // Folders can't be selected, only files can
         };
 
         return transformedFile;
@@ -273,25 +282,26 @@ export class StorageController {
 
       console.log(`✅ Transformed files for API response:`, {
         fileCount: transformedFiles.length,
-        sampleFiles: transformedFiles.slice(0, 3)
+        sampleFiles: transformedFiles.slice(0, 3),
       });
 
       res.json({
         files: transformedFiles,
-        nextPageToken: result.nextPageToken
+        nextPageToken: result.nextPageToken,
       });
     } catch (error) {
-      console.error('❌ Storage file listing error:', error);
+      console.error("❌ Storage file listing error:", error);
 
       // Provide a more user-friendly error message
       let errorMessage = (error as Error).message;
-      if (errorMessage.includes('No refresh token available')) {
-        errorMessage += ' Please disconnect and reconnect your Google Drive account to fix this issue.';
+      if (errorMessage.includes("No refresh token available")) {
+        errorMessage +=
+          " Please disconnect and reconnect your Google Drive account to fix this issue.";
       }
 
       res.status(500).json({
-        error: 'Failed to list files',
-        message: errorMessage
+        error: "Failed to list files",
+        message: errorMessage,
       });
     }
   }
@@ -303,22 +313,23 @@ export class StorageController {
   async getDownloadUrl(req: Request, res: Response) {
     try {
       const { integrationId, fileId } = req.params;
-      const userId = (req as any).user.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
       // Get the integration to verify ownership
-      const integration = await this.integrationService.getIntegrationById(integrationId);
+      const integration =
+        await this.integrationService.getIntegrationById(integrationId);
 
       if (!integration) {
         return res.status(404).json({
-          error: 'Integration not found',
-          message: 'Storage integration not found'
+          error: "Integration not found",
+          message: "Storage integration not found",
         });
       }
 
       if (integration.userId !== userId) {
         return res.status(403).json({
-          error: 'Forbidden',
-          message: 'You do not have permission to access this integration'
+          error: "Forbidden",
+          message: "You do not have permission to access this integration",
         });
       }
 
@@ -328,8 +339,8 @@ export class StorageController {
       res.json({ url });
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to get download URL',
-        message: (error as Error).message
+        error: "Failed to get download URL",
+        message: (error as Error).message,
       });
     }
   }
@@ -341,33 +352,37 @@ export class StorageController {
   async importFile(req: Request, res: Response) {
     try {
       const { integrationId, fileId } = req.params;
-      const userId = (req as any).user.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
       // Get the integration to verify ownership
-      const integration = await this.integrationService.getIntegrationById(integrationId);
+      const integration =
+        await this.integrationService.getIntegrationById(integrationId);
 
       if (!integration) {
         return res.status(404).json({
-          error: 'Integration not found',
-          message: 'Storage integration not found'
+          error: "Integration not found",
+          message: "Storage integration not found",
         });
       }
 
       if (integration.userId !== userId) {
         return res.status(403).json({
-          error: 'Forbidden',
-          message: 'You do not have permission to access this integration'
+          error: "Forbidden",
+          message: "You do not have permission to access this integration",
         });
       }
 
       // Import file
-      const result = await this.storageService.downloadFileToTemp(integration, fileId);
+      const result = await this.storageService.downloadFileToTemp(
+        integration,
+        fileId,
+      );
 
       res.json(result);
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to import file',
-        message: (error as Error).message
+        error: "Failed to import file",
+        message: (error as Error).message,
       });
     }
   }
@@ -380,33 +395,36 @@ export class StorageController {
     try {
       const { integrationId } = req.params;
       const { query, mimeType, pageSize, pageToken } = req.body;
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
       if (!query) {
-        return res.status(400).json({ error: 'Search query is required' });
+        return res.status(400).json({ error: "Search query is required" });
       }
 
-      const integration = await this.integrationService.getIntegrationById(integrationId);
+      const integration =
+        await this.integrationService.getIntegrationById(integrationId);
 
       if (!integration) {
-        return res.status(404).json({ error: 'Integration not found' });
+        return res.status(404).json({ error: "Integration not found" });
       }
 
       if (integration.userId !== userId) {
-        return res.status(403).json({ error: 'Unauthorized access to integration' });
+        return res
+          .status(403)
+          .json({ error: "Unauthorized access to integration" });
       }
 
       const result = await this.storageService.searchFiles(integration, query, {
         mimeType,
         pageSize,
-        pageToken
+        pageToken,
       });
 
       res.json(result);
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to search files',
-        message: (error as Error).message
+        error: "Failed to search files",
+        message: (error as Error).message,
       });
     }
   }
@@ -418,26 +436,35 @@ export class StorageController {
   async getThumbnail(req: Request, res: Response) {
     try {
       const { integrationId, fileId } = req.params;
-      const size = req.query.size ? parseInt(req.query.size as string) : undefined;
-      const userId = (req as any).user?.id;
+      const size = req.query.size
+        ? parseInt(req.query.size as string)
+        : undefined;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
-      const integration = await this.integrationService.getIntegrationById(integrationId);
+      const integration =
+        await this.integrationService.getIntegrationById(integrationId);
 
       if (!integration) {
-        return res.status(404).json({ error: 'Integration not found' });
+        return res.status(404).json({ error: "Integration not found" });
       }
 
       if (integration.userId !== userId) {
-        return res.status(403).json({ error: 'Unauthorized access to integration' });
+        return res
+          .status(403)
+          .json({ error: "Unauthorized access to integration" });
       }
 
-      const thumbnailUrl = await this.storageService.getThumbnail(integration, fileId, size);
+      const thumbnailUrl = await this.storageService.getThumbnail(
+        integration,
+        fileId,
+        size,
+      );
 
       res.json({ url: thumbnailUrl });
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to get thumbnail',
-        message: (error as Error).message
+        error: "Failed to get thumbnail",
+        message: (error as Error).message,
       });
     }
   }
@@ -450,20 +477,23 @@ export class StorageController {
     try {
       const { integrationId } = req.params;
       const { fileIds } = req.body;
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
       if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
-        return res.status(400).json({ error: 'fileIds array is required' });
+        return res.status(400).json({ error: "fileIds array is required" });
       }
 
-      const integration = await this.integrationService.getIntegrationById(integrationId);
+      const integration =
+        await this.integrationService.getIntegrationById(integrationId);
 
       if (!integration) {
-        return res.status(404).json({ error: 'Integration not found' });
+        return res.status(404).json({ error: "Integration not found" });
       }
 
       if (integration.userId !== userId) {
-        return res.status(403).json({ error: 'Unauthorized access to integration' });
+        return res
+          .status(403)
+          .json({ error: "Unauthorized access to integration" });
       }
 
       // For now, we'll just import them sequentially or in parallel
@@ -471,19 +501,22 @@ export class StorageController {
       const results = await Promise.all(
         fileIds.map(async (fileId) => {
           try {
-            const result = await this.storageService.downloadFileToTemp(integration, fileId);
+            const result = await this.storageService.downloadFileToTemp(
+              integration,
+              fileId,
+            );
             return { fileId, success: true, result };
           } catch (error) {
             return { fileId, success: false, error: (error as Error).message };
           }
-        })
+        }),
       );
 
       res.json({ results });
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to batch import files',
-        message: (error as Error).message
+        error: "Failed to batch import files",
+        message: (error as Error).message,
       });
     }
   }
@@ -495,16 +528,19 @@ export class StorageController {
   async listSharedDrives(req: Request, res: Response) {
     try {
       const { integrationId } = req.params;
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
-      const integration = await this.integrationService.getIntegrationById(integrationId);
+      const integration =
+        await this.integrationService.getIntegrationById(integrationId);
 
       if (!integration) {
-        return res.status(404).json({ error: 'Integration not found' });
+        return res.status(404).json({ error: "Integration not found" });
       }
 
       if (integration.userId !== userId) {
-        return res.status(403).json({ error: 'Unauthorized access to integration' });
+        return res
+          .status(403)
+          .json({ error: "Unauthorized access to integration" });
       }
 
       const drives = await this.storageService.listSharedDrives(integration);
@@ -512,8 +548,8 @@ export class StorageController {
       res.json({ drives });
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to list shared drives',
-        message: (error as Error).message
+        error: "Failed to list shared drives",
+        message: (error as Error).message,
       });
     }
   }
@@ -526,28 +562,35 @@ export class StorageController {
     try {
       const { integrationId, fileId } = req.params;
       const { format } = req.body;
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.id || DEFAULT_USER_ID;
 
-      const integration = await this.integrationService.getIntegrationById(integrationId);
+      const integration =
+        await this.integrationService.getIntegrationById(integrationId);
 
       if (!integration) {
-        return res.status(404).json({ error: 'Integration not found' });
+        return res.status(404).json({ error: "Integration not found" });
       }
 
       if (integration.userId !== userId) {
-        return res.status(403).json({ error: 'Unauthorized access to integration' });
+        return res
+          .status(403)
+          .json({ error: "Unauthorized access to integration" });
       }
 
-      const { stream, filename, mimeType } = await this.storageService.exportFile(integration, fileId, format);
+      const { stream, filename, mimeType } =
+        await this.storageService.exportFile(integration, fileId, format);
 
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Type', mimeType);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
+      res.setHeader("Content-Type", mimeType);
 
       stream.pipe(res);
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to export file',
-        message: (error as Error).message
+        error: "Failed to export file",
+        message: (error as Error).message,
       });
     }
   }

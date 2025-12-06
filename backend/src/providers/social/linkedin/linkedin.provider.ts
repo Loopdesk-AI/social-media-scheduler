@@ -1,9 +1,15 @@
 // LinkedIn Provider Implementation
 
-import axios from 'axios';
-import { SocialAbstract } from '../../base/social.abstract';
-import { SocialProvider, AuthTokenDetails, PostDetails, PostResponse, AnalyticsData } from '../../base/social.interface';
-import { mapLinkedInError } from './linkedin.errors';
+import axios from "axios";
+import { SocialAbstract } from "../../base/social.abstract";
+import {
+  SocialProvider,
+  AuthTokenDetails,
+  PostDetails,
+  PostResponse,
+  AnalyticsData,
+} from "../../base/social.interface";
+import { mapLinkedInError } from "./linkedin.errors";
 import {
   LinkedInUGCPostSettings,
   LinkedInUGCPost,
@@ -16,7 +22,7 @@ import {
   LinkedInCarouselCard,
   LinkedInHashtagSuggestion,
   LinkedInPostRequest,
-} from './linkedin.types';
+} from "./linkedin.types";
 import {
   validateContentLength,
   validateMediaCount,
@@ -39,21 +45,21 @@ import {
   finalizeVideoUpload,
   downloadTempFile,
   deleteTempFile,
-} from './linkedin.utils';
-import { makeId } from '../../../utils/helpers';
-import { rateLimiterService } from '../../../services/rate-limiter.service';
-import logger from '../../../utils/logger';
+} from "./linkedin.utils";
+import { makeId } from "../../../utils/helpers";
+import { rateLimiterService } from "../../../services/rate-limiter.service";
+import logger from "../../../utils/logger";
 
 export class LinkedInProvider extends SocialAbstract implements SocialProvider {
-  identifier = 'linkedin';
-  name = 'LinkedIn';
-  scopes = ['openid', 'profile', 'email', 'w_member_social'];
+  identifier = "linkedin";
+  name = "LinkedIn";
+  scopes = ["openid", "profile", "email", "w_member_social"];
   override maxConcurrentJob = 5;
   dto = {} as LinkedInUGCPostSettings;
-  editor = 'normal' as const;
+  editor = "normal" as const;
 
-  private readonly baseUrl = 'https://api.linkedin.com/v2';
-  private readonly redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/integrations/linkedin/callback`;
+  private readonly baseUrl = "https://api.linkedin.com/v2";
+  private readonly redirectUri = `${process.env.BACKEND_URL || "http://localhost:3000"}/api/integrations/linkedin/callback`;
 
   maxLength(): number {
     return 3000; // LinkedIn post limit
@@ -67,11 +73,11 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
     const state = makeId(6);
 
     const params = new URLSearchParams({
-      response_type: 'code',
+      response_type: "code",
       client_id: process.env.LINKEDIN_CLIENT_ID!,
       redirect_uri: this.redirectUri,
       state,
-      scope: this.scopes.join(' '),
+      scope: this.scopes.join(" "),
     });
 
     return {
@@ -89,9 +95,9 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
     try {
       // Exchange code for access token
       const tokenResponse = await axios.post(
-        'https://www.linkedin.com/oauth/v2/accessToken',
+        "https://www.linkedin.com/oauth/v2/accessToken",
         new URLSearchParams({
-          grant_type: 'authorization_code',
+          grant_type: "authorization_code",
           code: params.code,
           redirect_uri: this.redirectUri,
           client_id: process.env.LINKEDIN_CLIENT_ID!,
@@ -99,15 +105,15 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
         }),
         {
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            "Content-Type": "application/x-www-form-urlencoded",
           },
-        }
+        },
       );
 
       const tokens = tokenResponse.data;
 
       if (!tokens.access_token) {
-        throw new Error('No access token received from LinkedIn');
+        throw new Error("No access token received from LinkedIn");
       }
 
       // Fetch user profile using OIDC endpoint
@@ -115,35 +121,37 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
         `https://api.linkedin.com/v2/userinfo`,
         {
           headers: {
-            'Authorization': `Bearer ${tokens.access_token}`,
+            Authorization: `Bearer ${tokens.access_token}`,
           },
-        }
+        },
       );
 
       const profile = profileResponse.data;
 
       // Fetch organizations if scope granted
       let organizations: LinkedInOrganization[] = [];
-      if (this.scopes.includes('w_organization_social')) {
+      if (this.scopes.includes("w_organization_social")) {
         try {
           const orgsResponse = await axios.get(
             `${this.baseUrl}/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&projection=(elements*(organization~(id,localizedName,vanityName,logoV2(original~:playableStreams))))`,
             {
               headers: {
-                'Authorization': `Bearer ${tokens.access_token}`,
+                Authorization: `Bearer ${tokens.access_token}`,
               },
-            }
+            },
           );
 
-          organizations = orgsResponse.data.elements?.map((el: any) => el['organization~']) || [];
+          organizations =
+            orgsResponse.data.elements?.map((el: any) => el["organization~"]) ||
+            [];
         } catch (error) {
-          console.warn('Failed to fetch organizations:', error);
+          console.warn("Failed to fetch organizations:", error);
         }
       }
 
       return {
         accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token || '',
+        refreshToken: tokens.refresh_token || "",
         expiresIn: tokens.expires_in || 5184000, // 60 days default
         id: profile.sub,
         name: profile.name,
@@ -152,7 +160,9 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
         email: profile.email,
       } as any;
     } catch (error: any) {
-      const errorBody = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      const errorBody = error.response?.data
+        ? JSON.stringify(error.response.data)
+        : error.message;
       const mappedError = this.handleErrors(errorBody, error.response?.status);
 
       if (mappedError) {
@@ -167,18 +177,18 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
     try {
       // LinkedIn tokens are long-lived (60 days), refresh if needed
       const tokenResponse = await axios.post(
-        'https://www.linkedin.com/oauth/v2/accessToken',
+        "https://www.linkedin.com/oauth/v2/accessToken",
         new URLSearchParams({
-          grant_type: 'refresh_token',
+          grant_type: "refresh_token",
           refresh_token,
           client_id: process.env.LINKEDIN_CLIENT_ID!,
           client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
         }),
         {
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            "Content-Type": "application/x-www-form-urlencoded",
           },
-        }
+        },
       );
 
       const tokens = tokenResponse.data;
@@ -188,9 +198,9 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
         `https://api.linkedin.com/v2/userinfo`,
         {
           headers: {
-            'Authorization': `Bearer ${tokens.access_token}`,
+            Authorization: `Bearer ${tokens.access_token}`,
           },
-        }
+        },
       );
 
       const profile = profileResponse.data;
@@ -206,7 +216,9 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
         email: profile.email,
       };
     } catch (error: any) {
-      const errorBody = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      const errorBody = error.response?.data
+        ? JSON.stringify(error.response.data)
+        : error.message;
       const mappedError = this.handleErrors(errorBody, error.response?.status);
 
       if (mappedError) {
@@ -221,7 +233,7 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
     id: string,
     accessToken: string,
     postDetails: PostDetails[],
-    integration: any
+    integration: any,
   ): Promise<PostResponse[]> {
     const postDetail = postDetails[0];
     const settings = postDetail.settings as LinkedInUGCPostSettings;
@@ -231,12 +243,18 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
 
     // Validate content length
     if (!validateContentLength(text)) {
-      throw new Error('LinkedIn post content must be between 1 and 3000 characters');
+      throw new Error(
+        "LinkedIn post content must be between 1 and 3000 characters",
+      );
     }
 
     // Check rate limit
-    await rateLimiterService.waitForRateLimit('linkedin', id, 'ugcPosts');
-    logger.info('Posting to LinkedIn', { id, contentLength: text.length, isOrganization: settings.isOrganization });
+    await rateLimiterService.waitForRateLimit("linkedin", id, "ugcPosts");
+    logger.info("Posting to LinkedIn", {
+      id,
+      contentLength: text.length,
+      isOrganization: settings.isOrganization,
+    });
 
     // Determine if posting to organization or personal
     const isOrganization = settings.isOrganization || false;
@@ -251,23 +269,30 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
       if (postDetail.media && postDetail.media.length > 0) {
         const mediaType = getMediaType(postDetail.media[0].path);
 
-        if (mediaType !== 'unknown' && !validateMediaCount(postDetail.media.length, mediaType)) {
-          throw new Error('LinkedIn supports max 9 images or 1 video per post');
+        if (
+          mediaType !== "unknown" &&
+          !validateMediaCount(postDetail.media.length, mediaType)
+        ) {
+          throw new Error("LinkedIn supports max 9 images or 1 video per post");
         }
 
         for (const media of postDetail.media) {
-          const mediaUrn = await this.uploadMedia(accessToken, author, media.path);
+          const mediaUrn = await this.uploadMedia(
+            accessToken,
+            author,
+            media.path,
+          );
           mediaUrns.push(mediaUrn);
         }
       }
 
       // Determine share media category
-      let shareMediaCategory: 'NONE' | 'IMAGE' | 'VIDEO' | 'ARTICLE' = 'NONE';
+      let shareMediaCategory: "NONE" | "IMAGE" | "VIDEO" | "ARTICLE" = "NONE";
       if (settings.articleUrl) {
-        shareMediaCategory = 'ARTICLE';
+        shareMediaCategory = "ARTICLE";
       } else if (mediaUrns.length > 0) {
         const firstMediaType = getMediaType(postDetail.media![0].path);
-        shareMediaCategory = firstMediaType === 'video' ? 'VIDEO' : 'IMAGE';
+        shareMediaCategory = firstMediaType === "video" ? "VIDEO" : "IMAGE";
       }
 
       // Create Post using new Posts API (/rest/posts)
@@ -275,13 +300,13 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
       const postRequest: LinkedInPostRequest = {
         author,
         commentary: text,
-        visibility: settings.visibility || 'PUBLIC',
+        visibility: settings.visibility || "PUBLIC",
         distribution: {
-          feedDistribution: 'MAIN_FEED',
+          feedDistribution: "MAIN_FEED",
           targetEntities: [],
           thirdPartyDistributionChannels: [],
         },
-        lifecycleState: 'PUBLISHED',
+        lifecycleState: "PUBLISHED",
         isReshareDisabledByAuthor: false,
       };
 
@@ -294,10 +319,13 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
         postRequest.content = {
           media: {
             id: mediaUrn,
-            title: settings.clipTitle || 'Video', // Optional title
+            title: settings.clipTitle || "Video", // Optional title
           },
         };
-      } else if (settings.articleUrl && validateArticleUrl(settings.articleUrl)) {
+      } else if (
+        settings.articleUrl &&
+        validateArticleUrl(settings.articleUrl)
+      ) {
         // Add article
         postRequest.content = {
           article: {
@@ -308,41 +336,45 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
       }
 
       const response = await axios.post<LinkedInPostResponse>(
-        'https://api.linkedin.com/rest/posts',
+        "https://api.linkedin.com/rest/posts",
         postRequest,
         {
           headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'LinkedIn-Version': '202411',
-            'X-Restli-Protocol-Version': '2.0.0',
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "LinkedIn-Version": "202411",
+            "X-Restli-Protocol-Version": "2.0.0",
           },
-        }
+        },
       );
 
-      logger.info('LinkedIn post created', {
+      logger.info("LinkedIn post created", {
         status: response.status,
         headers: response.headers,
-        data: response.data
+        data: response.data,
       });
 
       // ID can be in response body or x-restli-id header
-      const urn = response.data.id || response.headers['x-restli-id'];
+      const urn = response.data.id || response.headers["x-restli-id"];
 
       if (!urn) {
-        throw new Error('Failed to retrieve post ID from LinkedIn response');
+        throw new Error("Failed to retrieve post ID from LinkedIn response");
       }
 
       const postId = extractIdFromUrn(urn);
 
-      return [{
-        id: postDetail.id,
-        postId,
-        releaseURL: `https://www.linkedin.com/feed/update/${urn}`,
-        status: 'success',
-      }];
+      return [
+        {
+          id: postDetail.id,
+          postId,
+          releaseURL: `https://www.linkedin.com/feed/update/${urn}`,
+          status: "success",
+        },
+      ];
     } catch (error: any) {
-      const errorBody = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      const errorBody = error.response?.data
+        ? JSON.stringify(error.response.data)
+        : error.message;
       const mappedError = this.handleErrors(errorBody, error.response?.status);
 
       if (mappedError) {
@@ -360,14 +392,17 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
   async postCarousel(
     id: string,
     accessToken: string,
-    settings: LinkedInCarouselSettings
+    settings: LinkedInCarouselSettings,
   ): Promise<string> {
-    await rateLimiterService.waitForRateLimit('linkedin', id, 'ugcPosts');
+    await rateLimiterService.waitForRateLimit("linkedin", id, "ugcPosts");
 
-    logger.info('Posting carousel to LinkedIn', { id, cardCount: settings.cards.length });
+    logger.info("Posting carousel to LinkedIn", {
+      id,
+      cardCount: settings.cards.length,
+    });
 
     if (settings.cards.length < 2 || settings.cards.length > 10) {
-      throw new Error('LinkedIn carousel must have between 2 and 10 cards');
+      throw new Error("LinkedIn carousel must have between 2 and 10 cards");
     }
 
     // Determine author
@@ -382,12 +417,14 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
       // For carousel, we need to register each image
       const registerRequest: LinkedInMediaUploadRequest = {
         registerUploadRequest: {
-          recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+          recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
           owner: author,
-          serviceRelationships: [{
-            relationshipType: 'OWNER',
-            identifier: 'urn:li:userGeneratedContent',
-          }],
+          serviceRelationships: [
+            {
+              relationshipType: "OWNER",
+              identifier: "urn:li:userGeneratedContent",
+            },
+          ],
         },
       };
 
@@ -396,13 +433,16 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
         registerRequest,
         {
           headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
-        }
+        },
       );
 
-      const { uploadUrl, headers } = registerResponse.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'];
+      const { uploadUrl, headers } =
+        registerResponse.data.value.uploadMechanism[
+          "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
+        ];
       const assetUrn = registerResponse.data.value.asset;
 
       // Upload the image
@@ -413,23 +453,27 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
     // Create carousel post
     const ugcPost: LinkedInUGCPost = {
       author,
-      lifecycleState: 'PUBLISHED',
+      lifecycleState: "PUBLISHED",
       specificContent: {
-        'com.linkedin.ugc.ShareContent': {
+        "com.linkedin.ugc.ShareContent": {
           shareCommentary: {
             text: settings.text,
           },
-          shareMediaCategory: 'IMAGE',
+          shareMediaCategory: "IMAGE",
           media: mediaUrns.map((urn, index) => ({
-            status: 'READY',
+            status: "READY",
             media: urn,
-            title: settings.cards[index].title ? { text: settings.cards[index].title } : undefined,
-            description: settings.cards[index].description ? { text: settings.cards[index].description } : undefined,
+            title: settings.cards[index].title
+              ? { text: settings.cards[index].title }
+              : undefined,
+            description: settings.cards[index].description
+              ? { text: settings.cards[index].description }
+              : undefined,
           })),
         },
       },
       visibility: {
-        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
+        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
       },
     };
 
@@ -438,14 +482,17 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
       ugcPost,
       {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'X-Restli-Protocol-Version': '2.0.0',
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-Restli-Protocol-Version": "2.0.0",
         },
-      }
+      },
     );
 
-    logger.info('Carousel posted successfully', { id, postId: response.data.id });
+    logger.info("Carousel posted successfully", {
+      id,
+      postId: response.data.id,
+    });
     return response.data.id;
   }
 
@@ -453,8 +500,12 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
    * Get AI-powered hashtag suggestions based on content
    * Uses simple keyword extraction and LinkedIn trending topics
    */
-  async getHashtagSuggestions(content: string): Promise<LinkedInHashtagSuggestion[]> {
-    logger.info('Generating hashtag suggestions', { contentLength: content.length });
+  async getHashtagSuggestions(
+    content: string,
+  ): Promise<LinkedInHashtagSuggestion[]> {
+    logger.info("Generating hashtag suggestions", {
+      contentLength: content.length,
+    });
 
     // Extract existing hashtags from content
     const existingHashtags = extractHashtags(content);
@@ -462,40 +513,48 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
     // Simple keyword extraction (could be enhanced with NLP)
     const keywords = content
       .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/[^a-z0-9\s]/g, "")
       .split(/\s+/)
-      .filter(word => word.length > 3)
-      .filter(word => !['this', 'that', 'with', 'from', 'have', 'been'].includes(word));
+      .filter((word) => word.length > 3)
+      .filter(
+        (word) =>
+          !["this", "that", "with", "from", "have", "been"].includes(word),
+      );
 
     // Get unique keywords
     const uniqueKeywords = Array.from(new Set(keywords)).slice(0, 10);
 
     // Filter out existing hashtags and create suggestions
     const suggestions: LinkedInHashtagSuggestion[] = uniqueKeywords
-      .filter(keyword => !existingHashtags.includes(`#${keyword}`))
-      .map(keyword => ({
+      .filter((keyword) => !existingHashtags.includes(`#${keyword}`))
+      .map((keyword) => ({
         hashtag: `#${keyword}`,
         relevanceScore: Math.random() * 100, // Simplified scoring
       }))
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, 5);
 
-    logger.info('Hashtag suggestions generated', { suggestionCount: suggestions.length });
+    logger.info("Hashtag suggestions generated", {
+      suggestionCount: suggestions.length,
+    });
     return suggestions;
   }
 
   private async uploadMedia(
     accessToken: string,
     author: string,
-    filePath: string
+    filePath: string,
   ): Promise<string> {
     // Check if filePath is a URL (remote file)
-    const isRemote = filePath.startsWith('http://') || filePath.startsWith('https://');
+    const isRemote =
+      filePath.startsWith("http://") || filePath.startsWith("https://");
     let localFilePath = filePath;
 
     try {
       if (isRemote) {
-        logger.info('Downloading remote file for LinkedIn upload', { url: filePath });
+        logger.info("Downloading remote file for LinkedIn upload", {
+          url: filePath,
+        });
         localFilePath = await downloadTempFile(filePath);
       }
 
@@ -503,23 +562,33 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
       const fileSize = getFileSize(localFilePath);
 
       // Validate file size
-      if (mediaType === 'image' && !validateImageSize(fileSize)) {
-        throw new Error('Image size must not exceed 10MB');
+      if (mediaType === "image" && !validateImageSize(fileSize)) {
+        throw new Error("Image size must not exceed 10MB");
       }
-      if (mediaType === 'video' && !validateVideoSize(fileSize)) {
-        throw new Error('Video size must not exceed 5GB');
+      if (mediaType === "video" && !validateVideoSize(fileSize)) {
+        throw new Error("Video size must not exceed 5GB");
       }
 
       // Handle Video Upload via Videos API
-      if (mediaType === 'video') {
-        logger.info('Starting LinkedIn video upload via Videos API', { filePath: localFilePath, fileSize });
+      if (mediaType === "video") {
+        logger.info("Starting LinkedIn video upload via Videos API", {
+          filePath: localFilePath,
+          fileSize,
+        });
 
         try {
           // 1. Initialize
-          const initData = await initializeVideoUpload(accessToken, author, fileSize);
+          const initData = await initializeVideoUpload(
+            accessToken,
+            author,
+            fileSize,
+          );
           const { video: videoUrn, uploadInstructions, uploadToken } = initData;
 
-          logger.info('LinkedIn video upload initialized', { videoUrn, chunks: uploadInstructions.length });
+          logger.info("LinkedIn video upload initialized", {
+            videoUrn,
+            chunks: uploadInstructions.length,
+          });
 
           // 2. Upload chunks
           const uploadedPartIds: string[] = [];
@@ -528,33 +597,43 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
               instruction.uploadUrl,
               localFilePath,
               instruction.firstByte,
-              instruction.lastByte
+              instruction.lastByte,
             );
             uploadedPartIds.push(etag);
           }
 
           // 3. Finalize
-          await finalizeVideoUpload(accessToken, videoUrn, uploadToken!, uploadedPartIds);
+          await finalizeVideoUpload(
+            accessToken,
+            videoUrn,
+            uploadToken!,
+            uploadedPartIds,
+          );
 
-          logger.info('LinkedIn video upload finalized', { videoUrn });
+          logger.info("LinkedIn video upload finalized", { videoUrn });
           return videoUrn;
         } catch (error: any) {
-          logger.error('LinkedIn video upload failed', { error: error.message, response: error.response?.data });
+          logger.error("LinkedIn video upload failed", {
+            error: error.message,
+            response: error.response?.data,
+          });
           throw error;
         }
       }
 
       // Register upload (Images only - Assets API)
-      const recipe = 'urn:li:digitalmediaRecipe:feedshare-image';
+      const recipe = "urn:li:digitalmediaRecipe:feedshare-image";
 
       const registerRequest: LinkedInMediaUploadRequest = {
         registerUploadRequest: {
           recipes: [recipe],
           owner: author,
-          serviceRelationships: [{
-            relationshipType: 'OWNER',
-            identifier: 'urn:li:userGeneratedContent',
-          }],
+          serviceRelationships: [
+            {
+              relationshipType: "OWNER",
+              identifier: "urn:li:userGeneratedContent",
+            },
+          ],
         },
       };
 
@@ -563,13 +642,16 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
         registerRequest,
         {
           headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
-        }
+        },
       );
 
-      const { uploadUrl, headers } = registerResponse.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'];
+      const { uploadUrl, headers } =
+        registerResponse.data.value.uploadMechanism[
+          "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
+        ];
       const assetUrn = registerResponse.data.value.asset;
 
       // Upload file
@@ -587,14 +669,14 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
   async analytics(
     id: string,
     accessToken: string,
-    date: number
+    date: number,
   ): Promise<AnalyticsData[]> {
     try {
       const startDate = new Date(date);
       const endDate = new Date();
 
       // Determine if this is organization or personal
-      const isOrganization = id.includes('organization');
+      const isOrganization = id.includes("organization");
 
       if (isOrganization) {
         // Fetch organization analytics
@@ -602,9 +684,9 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
           `${this.baseUrl}/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=urn:li:organization:${id}`,
           {
             headers: {
-              'Authorization': `Bearer ${accessToken}`,
+              Authorization: `Bearer ${accessToken}`,
             },
-          }
+          },
         );
 
         const stats = response.data.elements || [];
@@ -630,44 +712,50 @@ export class LinkedInProvider extends SocialAbstract implements SocialProvider {
             total.likeCount || 0,
             total.commentCount || 0,
             total.shareCount || 0,
-            total.impressionCount || 0
+            total.impressionCount || 0,
           );
           engagementData.push({ date, total: engagement });
         });
 
         return [
-          { label: 'Impressions', data: impressionsData },
-          { label: 'Clicks', data: clicksData },
-          { label: 'Likes', data: likesData },
-          { label: 'Comments', data: commentsData },
-          { label: 'Shares', data: sharesData },
-          { label: 'Engagement Rate (%)', data: engagementData },
+          { label: "Impressions", data: impressionsData },
+          { label: "Clicks", data: clicksData },
+          { label: "Likes", data: likesData },
+          { label: "Comments", data: commentsData },
+          { label: "Shares", data: sharesData },
+          { label: "Engagement Rate (%)", data: engagementData },
         ];
       } else {
         // LinkedIn does NOT provide analytics for personal profiles via API
         // Analytics are only available for:
         // 1. Company/Organization pages (requires w_organization_social scope + Marketing Developer Platform)
         // 2. Advertising campaigns
-        // 
+        //
         // Personal profile analytics must be viewed directly on LinkedIn.com
-        logger.info('LinkedIn personal profile analytics not available via API', { id });
+        logger.info(
+          "LinkedIn personal profile analytics not available via API",
+          { id },
+        );
 
         // Return empty array - analytics not supported for personal profiles
         return [];
       }
     } catch (error: any) {
-      logger.error('LinkedIn analytics error', {
+      logger.error("LinkedIn analytics error", {
         error: error.message,
         status: error.response?.status,
-        data: error.response?.data
+        data: error.response?.data,
       });
       // Return empty array on error as per requirements
       return [];
     }
   }
 
-  public override handleErrors(body: string, statusCode?: number):
-    | { type: 'refresh-token' | 'bad-body' | 'retry'; value: string }
+  public override handleErrors(
+    body: string,
+    statusCode?: number,
+  ):
+    | { type: "refresh-token" | "bad-body" | "retry"; value: string }
     | undefined {
     return mapLinkedInError(body, statusCode);
   }

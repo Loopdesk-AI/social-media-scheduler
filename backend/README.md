@@ -1,308 +1,297 @@
-# Social Media Scheduler Backend
+# Social Media Scheduler - Backend
 
-Node.js + Express backend for social media integration and post scheduling.
+Express.js backend for the Social Media Scheduler application.
 
-## Features
+## Architecture
 
-- ✅ Instagram OAuth integration via Facebook Business
-- ✅ YouTube, TikTok, LinkedIn, Facebook, Twitter/X integrations
-- ✅ Post scheduling with BullMQ job queue
-- ✅ Prisma ORM with PostgreSQL
-- ✅ Token encryption with AES-256
-- ✅ Automatic retry logic and error handling
-- ✅ RESTful API with Express
-- ✅ Comprehensive monitoring and observability
-- ✅ Prometheus metrics and Grafana dashboards
-- ✅ Sentry error tracking
-- ✅ Health checks and readiness probes
+- **Runtime**: Node.js with TypeScript
+- **Framework**: Express.js
+- **Database**: PostgreSQL with Drizzle ORM
+- **Queue**: BullMQ with Redis
+- **Storage**: Cloudflare R2
 
 ## Prerequisites
 
-- Node.js 20+
-- PostgreSQL 15+
-- Redis 7+
-- Docker & Docker Compose (optional)
+- Node.js 18+
+- Cloud-hosted PostgreSQL database
+- Cloud-hosted Redis instance (or local Redis for development)
 
-## Quick Start
+## Environment Variables
 
-### 1. Start Database Services
+Create a `.env` file with the following variables:
 
-```bash
-# Start PostgreSQL and Redis with Docker Compose
-docker-compose up -d
+```env
+# Server
+PORT=3000
+NODE_ENV=development
+FRONTEND_URL=http://localhost:5173
+BACKEND_URL=http://localhost:3000
+
+# Database (Cloud Postgres)
+DATABASE_URL=postgresql://user:password@host:5432/database
+
+# Redis Configuration
+REDIS_HOST=your-redis-host.com    # Use 127.0.0.1 if using SSH tunnel
+REDIS_PORT=6379
+REDIS_PASSWORD=                   # Optional - leave empty if Redis has no auth
+REDIS_TLS=false                   # Set to true for AWS ElastiCache with TLS
+REDIS_CLUSTER_MODE=false          # Set to true for AWS ElastiCache cluster mode
+
+# Encryption Key (64 hex characters)
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+ENCRYPTION_KEY=your-64-character-hex-key
+
+# OAuth - Instagram/Facebook
+FACEBOOK_APP_ID=
+FACEBOOK_APP_SECRET=
+
+# OAuth - YouTube
+YOUTUBE_CLIENT_ID=
+YOUTUBE_CLIENT_SECRET=
+
+# OAuth - LinkedIn
+LINKEDIN_CLIENT_ID=
+LINKEDIN_CLIENT_SECRET=
+
+# OAuth - Twitter
+TWITTER_CLIENT_ID=
+TWITTER_CLIENT_SECRET=
+
+# OAuth - TikTok
+TIKTOK_CLIENT_KEY=
+TIKTOK_CLIENT_SECRET=
+
+# Google Drive OAuth
+# Note: If not set, Google Drive will fall back to using YOUTUBE_CLIENT_ID/SECRET
+# Both services can share the same Google OAuth client, but you must add BOTH redirect URIs
+# to your Google Cloud Console OAuth client:
+#   - http://localhost:3000/api/integrations/youtube/callback
+#   - http://localhost:3000/api/storage/callback/google-drive
+GOOGLE_DRIVE_CLIENT_ID=
+GOOGLE_DRIVE_CLIENT_SECRET=
+GOOGLE_DRIVE_REDIRECT_URI=
+
+# Dropbox OAuth
+DROPBOX_CLIENT_ID=
+DROPBOX_CLIENT_SECRET=
+DROPBOX_REDIRECT_URI=
+
+# Cloudflare R2 Storage (required)
+CLOUDFLARE_R2_ACCOUNT_ID=your-account-id
+CLOUDFLARE_R2_ACCESS_KEY=your-access-key
+CLOUDFLARE_R2_SECRET_KEY=your-secret-key
+CLOUDFLARE_R2_BUCKET=your-bucket-name
+CLOUDFLARE_R2_PUBLIC_URL=https://your-bucket.your-domain.com
 ```
 
-### 2. Install Dependencies
+## Installation
 
 ```bash
-cd backend
 npm install
 ```
 
-### 3. Configure Environment
+## Database Setup
+
+Push the schema to your database:
 
 ```bash
-# Copy example env file
-cp .env.example .env
-
-# Generate encryption key
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-
-# Edit .env and add:
-# - ENCRYPTION_KEY (generated above)
-# - FACEBOOK_APP_ID and FACEBOOK_APP_SECRET
-# - DATABASE_URL (default: postgresql://postgres:postgres@localhost:5432/social_scheduler)
+npm run db:push
 ```
 
-### 4. Setup Database
+Or generate and run migrations:
 
 ```bash
-# Generate Prisma client
-npm run prisma:generate
-
-# Push schema to database
-npm run prisma:push
-```
-
-### 5. Start Development Server
-
-```bash
-npm run dev
-```
-
-Server will start on http://localhost:3001
-
-## API Endpoints
-
-### Integrations
-
-- `GET /api/integrations/types` - Get available integration types
-- `GET /api/integrations/:provider/auth-url` - Generate OAuth URL
-- `POST /api/integrations/:provider/callback` - Handle OAuth callback
-- `GET /api/integrations` - List all integrations
-- `DELETE /api/integrations/:id` - Delete integration
-
-### Posts
-
-- `POST /api/posts` - Create and schedule post
-- `GET /api/posts` - List posts with filters
-- `GET /api/posts/:id` - Get single post
-- `PATCH /api/posts/:id` - Update post
-- `PATCH /api/posts/:id/reschedule` - Reschedule post
-- `DELETE /api/posts/:id` - Cancel post
-
-## Authentication
-
-For MVP, use `X-Organization-Id` header:
-
-```bash
-curl -H "X-Organization-Id: org-123" http://localhost:3001/api/integrations
-```
-
-## Facebook App Setup
-
-1. Go to https://developers.facebook.com/
-2. Create new app
-3. Add Instagram Basic Display and Instagram Graph API products
-4. Configure OAuth redirect URI: `http://localhost:5173/integrations/social/instagram`
-5. Copy App ID and App Secret to `.env`
-
-## Project Structure
-
-```
-backend/
-├── src/
-│   ├── controllers/      # Request handlers
-│   ├── routes/           # API routes
-│   ├── services/         # Business logic
-│   ├── providers/        # Platform integrations
-│   ├── middleware/       # Express middleware
-│   ├── database/         # Prisma setup
-│   ├── utils/            # Utilities
-│   ├── app.ts            # Express app
-│   └── index.ts          # Entry point
-├── package.json
-└── tsconfig.json
+npm run db:generate
+npm run db:migrate
 ```
 
 ## Development
 
 ```bash
-# Run in development mode with auto-reload
 npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# View Prisma Studio
-npm run prisma:studio
 ```
 
-## Environment Variables
+The server will start at `http://localhost:3000`.
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| PORT | Server port | No (default: 3001) |
-| NODE_ENV | Environment | No (default: development) |
-| DATABASE_URL | PostgreSQL connection string | Yes |
-| REDIS_HOST | Redis host | Yes |
-| REDIS_PORT | Redis port | Yes |
-| ENCRYPTION_KEY | 64-char hex string for token encryption | Yes |
-| FACEBOOK_APP_ID | Facebook App ID | Yes |
-| FACEBOOK_APP_SECRET | Facebook App Secret | Yes |
-| FRONTEND_URL | Frontend URL for OAuth redirects | Yes |
+## Redis Configuration
 
-## Troubleshooting
+### Option 1: Local Redis (Recommended for Development)
 
-### Database Connection Error
+Install and run Redis locally:
 
 ```bash
-# Check if PostgreSQL is running
-docker-compose ps
+# macOS
+brew install redis
+brew services start redis
 
-# View logs
-docker-compose logs postgres
+# Ubuntu/Debian
+sudo apt-get install redis-server
+sudo systemctl start redis
 ```
 
-### Redis Connection Error
+Configure `.env`:
+
+```env
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_TLS=false
+REDIS_CLUSTER_MODE=false
+```
+
+### Option 2: SSH Tunnel to AWS ElastiCache
+
+AWS ElastiCache is only accessible from within the same VPC. To connect from your local machine, use an SSH tunnel through an EC2 instance in the same VPC.
+
+**Step 1: Open SSH tunnel (run in a separate terminal)**
 
 ```bash
-# Check if Redis is running
-docker-compose ps
-
-# Test connection
-redis-cli ping
+ssh -i /path/to/your-key.pem \
+    -L 6379:your-elasticache-endpoint.cache.amazonaws.com:6379 \
+    ec2-user@your-ec2-public-ip \
+    -N
 ```
 
-### Prisma Client Not Generated
+Replace:
+- `/path/to/your-key.pem` - Path to your EC2 SSH key
+- `your-elasticache-endpoint.cache.amazonaws.com` - Your ElastiCache endpoint
+- `your-ec2-public-ip` - Public IP of an EC2 instance in the same VPC
+
+**Step 2: Configure `.env` for tunnel**
+
+```env
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_TLS=false
+REDIS_CLUSTER_MODE=false
+```
+
+> **Note:** When using SSH tunnel, connect without TLS (the tunnel handles encryption) and use standalone mode since you're connecting to a single forwarded port.
+
+### Option 3: Direct Connection (AWS EC2/ECS in Same VPC)
+
+When running the backend on AWS infrastructure in the same VPC as ElastiCache:
+
+```env
+REDIS_HOST=clustercfg.your-cluster.region.cache.amazonaws.com
+REDIS_PORT=6379
+REDIS_TLS=true
+REDIS_CLUSTER_MODE=true
+```
+
+### Option 4: Disable Redis (Limited Functionality)
+
+To run without Redis (scheduled posts won't auto-publish):
+
+```env
+# Comment out or remove REDIS_HOST
+# REDIS_HOST=...
+```
+
+### Testing Redis Connection
+
+Use the included test script to verify your Redis connection:
 
 ```bash
-# Regenerate Prisma client
-npm run prisma:generate
+npx ts-node test-redis.ts
 ```
+
+Or with custom configuration:
+
+```bash
+REDIS_HOST=127.0.0.1 REDIS_PORT=6379 npx ts-node test-redis.ts
+```
+
+## Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start development server with hot reload |
+| `npm run build` | Compile TypeScript to JavaScript |
+| `npm run start` | Start production server |
+| `npm run db:generate` | Generate Drizzle migrations |
+| `npm run db:migrate` | Run database migrations |
+| `npm run db:push` | Push schema directly to database |
+| `npm run db:studio` | Open Drizzle Studio GUI |
+
+## Project Structure
+
+```
+src/
+├── app.ts                 # Express app configuration
+├── index.ts               # Server entry point
+├── controllers/           # Request handlers
+├── database/
+│   ├── db.ts              # Drizzle client
+│   └── schema.ts          # Database schema
+├── middleware/
+│   └── error.middleware.ts
+├── monitoring/
+│   ├── bull-board.ts      # Queue dashboard
+│   └── health.service.ts  # Health checks
+├── providers/             # Social media integrations
+├── routes/                # API route definitions
+├── services/              # Business logic
+├── storage/               # File storage adapters
+└── utils/                 # Utility functions
+```
+
+## API Endpoints
+
+### Health
+
+- `GET http://localhost:3000/health` - Full health check
+- `GET http://localhost:3000/health/live` - Liveness probe
+- `GET http://localhost:3000/health/ready` - Readiness probe
+
+### Integrations
+
+- `GET /api/integrations` - List all integrations
+- `GET /api/integrations/types` - Get supported platforms
+- `GET /api/integrations/:provider/auth-url` - Get OAuth URL
+- `POST /api/integrations/:provider/callback` - OAuth callback
+- `DELETE /api/integrations/:id` - Remove integration
+- `PATCH /api/integrations/:id/toggle` - Enable/disable integration
+
+### Posts
+
+- `GET /api/posts` - List posts with filters
+- `POST /api/posts` - Create single post
+- `POST /api/posts/multi-platform` - Create multi-platform post
+- `GET /api/posts/:id` - Get post details
+- `PATCH /api/posts/:id` - Update post
+- `PATCH /api/posts/:id/reschedule` - Reschedule post
+- `DELETE /api/posts/:id` - Cancel post
+
+### Media
+
+- `POST /api/media/upload` - Upload media file
+- `GET /api/media` - List media files
+- `GET /api/media/:id` - Get media details
+- `DELETE /api/media/:id` - Delete media
+
+### Storage
+
+- `GET /api/storage/providers` - List storage providers
+- `GET /api/storage/auth/:provider` - Get storage OAuth URL
+- `GET /api/storage/integrations` - List storage integrations
+- `GET /api/storage/:id/files` - List files from storage
+- `POST /api/storage/:id/import/:fileId` - Import file from storage
+
+### User
+
+- `GET /api/user/profile` - Get user profile
+- `PUT /api/user/profile` - Update profile
+
+### Admin
+
+- `GET /admin/queues` - BullMQ dashboard
+- `GET /admin/queue-metrics` - Queue statistics
+- `GET /admin/system` - System information
+
+## Queue Dashboard
+
+Access the BullMQ dashboard at `http://localhost:3000/admin/queues` to monitor scheduled posts and job status.
 
 ## License
 
 MIT
-
-
-## Monitoring & Observability
-
-The backend includes comprehensive monitoring capabilities. See [MONITORING.md](./MONITORING.md) for detailed documentation.
-
-### Quick Access
-
-- **Health Check**: http://localhost:3001/health
-- **Metrics (Prometheus)**: http://localhost:3001/metrics
-- **Queue Dashboard**: http://localhost:3001/admin/queues
-- **System Info**: http://localhost:3001/admin/system
-
-### Health Endpoints
-
-```bash
-# General health check
-curl http://localhost:3001/health
-
-# Liveness probe (Kubernetes)
-curl http://localhost:3001/health/live
-
-# Readiness probe (Kubernetes)
-curl http://localhost:3001/health/ready
-```
-
-### Prometheus Metrics
-
-The `/metrics` endpoint exposes metrics in Prometheus format:
-
-- HTTP request rate, duration, and errors
-- Queue size and processing metrics
-- Integration API performance
-- Post publishing success/failure rates
-- System metrics (CPU, memory, heap)
-
-### Queue Dashboard (Bull Board)
-
-Access the queue dashboard at http://localhost:3001/admin/queues to:
-
-- View all jobs (waiting, active, completed, failed)
-- Retry failed jobs
-- Monitor queue health
-- View job details and logs
-
-Enable in production:
-```env
-ENABLE_BULL_BOARD=true
-```
-
-### Error Tracking (Sentry)
-
-Configure Sentry for error tracking:
-
-```env
-SENTRY_DSN=https://your-dsn@sentry.io/project-id
-```
-
-Features:
-- Automatic error capture
-- Performance monitoring
-- Release tracking
-- User context
-
-### Logging
-
-Structured logging with Winston:
-
-- **Development**: Console output with colors
-- **Production**: File output to `./logs/`
-  - `logs/error.log`: Error logs only
-  - `logs/combined.log`: All logs
-
-Configure log level:
-```env
-LOG_LEVEL=debug  # debug, info, warn, error
-```
-
-### Grafana Dashboard
-
-Import the included Grafana dashboard:
-
-```bash
-# Import grafana-dashboard.json into Grafana
-```
-
-Visualizes:
-- Request rate and latency
-- Error rates
-- Queue metrics
-- Post publishing stats
-- Memory and CPU usage
-
-### Prometheus Alerts
-
-Use the included alert rules:
-
-```bash
-# Add to Prometheus configuration
-cp prometheus-alerts.yml /etc/prometheus/alerts/
-```
-
-Alerts for:
-- High error rates
-- Queue backlogs
-- Service downtime
-- High memory/CPU usage
-- Integration failures
-
-### Monitoring Best Practices
-
-1. **Set up alerts** for critical metrics
-2. **Monitor queue backlog** to prevent delays
-3. **Track error rates** by provider
-4. **Use health checks** in load balancers
-5. **Enable Sentry** in production
-6. **Review logs** regularly
-
-For detailed monitoring documentation, see [MONITORING.md](./MONITORING.md).

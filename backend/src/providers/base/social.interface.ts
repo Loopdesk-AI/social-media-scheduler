@@ -1,4 +1,4 @@
-import { Integration } from '@prisma/client';
+import { Integration } from "../../database/schema";
 
 /**
  * Auth token details returned from OAuth flow
@@ -19,7 +19,7 @@ export interface AuthTokenDetails {
  */
 export interface MediaAttachment {
   path: string; // URL or file path
-  type: 'image' | 'video';
+  type: "image" | "video";
   thumbnailTimestamp?: number; // For videos
 }
 
@@ -40,7 +40,7 @@ export interface PostResponse {
   id: string; // Post record ID
   postId: string; // Platform post ID
   releaseURL: string; // Published post URL
-  status: 'success' | 'error';
+  status: "success" | "error";
 }
 
 /**
@@ -68,7 +68,7 @@ export interface SocialProvider {
   identifier: string; // Unique provider ID (e.g., 'instagram', 'youtube')
   name: string; // Display name
   scopes: string[]; // Required OAuth scopes
-  editor: 'normal' | 'custom'; // Editor type
+  editor: "normal" | "custom"; // Editor type
   dto?: any; // Settings DTO class
   maxConcurrentJob: number; // Max concurrent API calls
 
@@ -107,7 +107,7 @@ export interface SocialProvider {
     id: string,
     accessToken: string,
     postDetails: PostDetails[],
-    integration: Integration
+    integration: Integration,
   ): Promise<PostResponse[]>;
 
   /**
@@ -116,6 +116,6 @@ export interface SocialProvider {
   analytics(
     id: string,
     accessToken: string,
-    date: number
+    date: number,
   ): Promise<AnalyticsData[]>;
 }

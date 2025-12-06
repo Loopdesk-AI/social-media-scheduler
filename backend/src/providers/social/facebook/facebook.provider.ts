@@ -1,9 +1,15 @@
 // Facebook Page Provider Implementation
 
-import axios from 'axios';
-import { SocialAbstract } from '../../base/social.abstract';
-import { SocialProvider, AuthTokenDetails, PostDetails, PostResponse, AnalyticsData } from '../../base/social.interface';
-import { mapFacebookError } from './facebook.errors';
+import axios from "axios";
+import { SocialAbstract } from "../../base/social.abstract";
+import {
+  SocialProvider,
+  AuthTokenDetails,
+  PostDetails,
+  PostResponse,
+  AnalyticsData,
+} from "../../base/social.interface";
+import { mapFacebookError } from "./facebook.errors";
 import {
   FacebookPageSettings,
   FacebookPage,
@@ -14,7 +20,7 @@ import {
   FacebookStorySettings,
   FacebookCarouselSettings,
   FacebookReelSettings,
-} from './facebook.types';
+} from "./facebook.types";
 import {
   validateContentLength,
   getFileSize,
@@ -27,21 +33,26 @@ import {
   calculateEngagementRate,
   wait,
   calculateBackoffDelay,
-} from './facebook.utils';
-import { makeId } from '../../../utils/helpers';
-import { rateLimiterService } from '../../../services/rate-limiter.service';
-import logger from '../../../utils/logger';
+} from "./facebook.utils";
+import { makeId } from "../../../utils/helpers";
+import { rateLimiterService } from "../../../services/rate-limiter.service";
+import logger from "../../../utils/logger";
 
 export class FacebookProvider extends SocialAbstract implements SocialProvider {
-  identifier = 'facebook';
-  name = 'Facebook Page';
-  scopes = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata'];
+  identifier = "facebook";
+  name = "Facebook Page";
+  scopes = [
+    "pages_show_list",
+    "pages_read_engagement",
+    "pages_manage_posts",
+    "pages_manage_metadata",
+  ];
   override maxConcurrentJob = 10;
   dto = {} as FacebookPageSettings; // Fix: Create an instance instead of referencing the type
-  editor = 'normal' as const;
+  editor = "normal" as const;
 
-  private readonly baseUrl = 'https://graph.facebook.com/v20.0';
-  private readonly redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/integrations/facebook/callback`;
+  private readonly baseUrl = "https://graph.facebook.com/v20.0";
+  private readonly redirectUri = `${process.env.BACKEND_URL || "http://localhost:3000"}/api/integrations/facebook/callback`;
 
   maxLength(): number {
     return 63206; // Facebook post limit
@@ -58,7 +69,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       client_id: process.env.FACEBOOK_APP_ID!,
       redirect_uri: this.redirectUri,
       state,
-      scope: this.scopes.join(','),
+      scope: this.scopes.join(","),
     });
 
     return {
@@ -84,7 +95,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
             redirect_uri: this.redirectUri,
             code: params.code,
           },
-        }
+        },
       );
 
       const userAccessToken = tokenResponse.data.access_token;
@@ -95,9 +106,9 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         {
           params: {
             access_token: userAccessToken,
-            fields: 'id,name,email,picture',
+            fields: "id,name,email,picture",
           },
-        }
+        },
       );
 
       const profile = profileResponse.data;
@@ -108,15 +119,17 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         {
           params: {
             access_token: userAccessToken,
-            fields: 'id,name,access_token,category,picture',
+            fields: "id,name,access_token,category,picture",
           },
-        }
+        },
       );
 
       const pages = pagesResponse.data.data;
 
       if (!pages || pages.length === 0) {
-        throw new Error('No Facebook Pages found. Please create a Facebook Page first.');
+        throw new Error(
+          "No Facebook Pages found. Please create a Facebook Page first.",
+        );
       }
 
       // Return first page (or let user select in UI)
@@ -124,16 +137,18 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
 
       return {
         accessToken: selectedPage.access_token,
-        refreshToken: '', // Facebook page tokens don't expire
+        refreshToken: "", // Facebook page tokens don't expire
         expiresIn: 0, // Never expires
         id: selectedPage.id,
         name: selectedPage.name,
-        picture: selectedPage.picture?.data?.url || '',
+        picture: selectedPage.picture?.data?.url || "",
         username: selectedPage.name,
         // Store all pages for later selection in a different way if needed
       };
     } catch (error: any) {
-      const errorBody = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      const errorBody = error.response?.data
+        ? JSON.stringify(error.response.data)
+        : error.message;
       const mappedError = this.handleErrors(errorBody);
 
       if (mappedError) {
@@ -146,21 +161,23 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
 
   async refreshToken(refresh_token: string): Promise<AuthTokenDetails> {
     // Facebook page tokens don't expire, but we can re-fetch if needed
-    throw new Error('Facebook page tokens do not require refresh');
+    throw new Error("Facebook page tokens do not require refresh");
   }
 
   async post(
     id: string,
     accessToken: string,
     postDetails: PostDetails[],
-    integration: any
+    integration: any,
   ): Promise<PostResponse[]> {
     const postDetail = postDetails[0];
     const settings = postDetail.settings as FacebookPageSettings;
 
     // Validate content length
     if (!validateContentLength(settings.message)) {
-      throw new Error('Facebook post content must be between 1 and 63,206 characters');
+      throw new Error(
+        "Facebook post content must be between 1 and 63,206 characters",
+      );
     }
 
     try {
@@ -170,7 +187,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       if (postDetail.media && postDetail.media.length > 0) {
         const mediaType = getMediaType(postDetail.media[0].path);
 
-        if (mediaType === 'video') {
+        if (mediaType === "video") {
           // Video post
           postId = await this.postVideo(id, accessToken, postDetail, settings);
         } else if (postDetail.media.length === 1) {
@@ -178,7 +195,12 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
           postId = await this.postPhoto(id, accessToken, postDetail, settings);
         } else {
           // Multiple photos post
-          postId = await this.postMultiplePhotos(id, accessToken, postDetail, settings);
+          postId = await this.postMultiplePhotos(
+            id,
+            accessToken,
+            postDetail,
+            settings,
+          );
         }
       } else if (settings.link) {
         // Link post
@@ -188,14 +210,18 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         postId = await this.postText(id, accessToken, settings);
       }
 
-      return [{
-        id: postDetail.id,
-        postId,
-        releaseURL: `https://www.facebook.com/${postId}`,
-        status: 'success', // Fix: Use allowed status value instead of 'published'
-      }];
+      return [
+        {
+          id: postDetail.id,
+          postId,
+          releaseURL: `https://www.facebook.com/${postId}`,
+          status: "success", // Fix: Use allowed status value instead of 'published'
+        },
+      ];
     } catch (error: any) {
-      const errorBody = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      const errorBody = error.response?.data
+        ? JSON.stringify(error.response.data)
+        : error.message;
       const mappedError = this.handleErrors(errorBody);
 
       if (mappedError) {
@@ -209,12 +235,15 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
   private async postText(
     pageId: string,
     accessToken: string,
-    settings: FacebookPageSettings
+    settings: FacebookPageSettings,
   ): Promise<string> {
     // Check rate limit before making API call
-    await rateLimiterService.waitForRateLimit('facebook', pageId, 'feed');
+    await rateLimiterService.waitForRateLimit("facebook", pageId, "feed");
 
-    logger.info('Posting text to Facebook', { pageId, messageLength: settings.message.length });
+    logger.info("Posting text to Facebook", {
+      pageId,
+      messageLength: settings.message.length,
+    });
 
     const response = await axios.post<FacebookPostResponse>(
       `${this.baseUrl}/${pageId}/feed`,
@@ -226,20 +255,20 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         params: {
           access_token: accessToken,
         },
-      }
+      },
     );
 
-    logger.info('Text post successful', { pageId, postId: response.data.id });
+    logger.info("Text post successful", { pageId, postId: response.data.id });
     return response.data.id;
   }
 
   private async postLink(
     pageId: string,
     accessToken: string,
-    settings: FacebookPageSettings
+    settings: FacebookPageSettings,
   ): Promise<string> {
-    await rateLimiterService.waitForRateLimit('facebook', pageId, 'feed');
-    logger.info('Posting link to Facebook', { pageId, link: settings.link });
+    await rateLimiterService.waitForRateLimit("facebook", pageId, "feed");
+    logger.info("Posting link to Facebook", { pageId, link: settings.link });
 
     const response = await axios.post<FacebookPostResponse>(
       `${this.baseUrl}/${pageId}/feed`,
@@ -252,10 +281,10 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         params: {
           access_token: accessToken,
         },
-      }
+      },
     );
 
-    logger.info('Link post successful', { pageId, postId: response.data.id });
+    logger.info("Link post successful", { pageId, postId: response.data.id });
     return response.data.id;
   }
 
@@ -263,10 +292,13 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     pageId: string,
     accessToken: string,
     postDetail: PostDetails,
-    settings: FacebookPageSettings
+    settings: FacebookPageSettings,
   ): Promise<string> {
-    await rateLimiterService.waitForRateLimit('facebook', pageId, 'photos');
-    logger.info('Posting photo to Facebook', { pageId, photoUrl: postDetail.media![0].path });
+    await rateLimiterService.waitForRateLimit("facebook", pageId, "photos");
+    logger.info("Posting photo to Facebook", {
+      pageId,
+      photoUrl: postDetail.media![0].path,
+    });
 
     const response = await axios.post<FacebookPostResponse>(
       `${this.baseUrl}/${pageId}/photos`,
@@ -279,10 +311,13 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         params: {
           access_token: accessToken,
         },
-      }
+      },
     );
 
-    logger.info('Photo post successful', { pageId, postId: response.data.post_id || response.data.id });
+    logger.info("Photo post successful", {
+      pageId,
+      postId: response.data.post_id || response.data.id,
+    });
     return response.data.post_id || response.data.id;
   }
 
@@ -290,10 +325,13 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     pageId: string,
     accessToken: string,
     postDetail: PostDetails,
-    settings: FacebookPageSettings
+    settings: FacebookPageSettings,
   ): Promise<string> {
-    await rateLimiterService.waitForRateLimit('facebook', pageId, 'feed');
-    logger.info('Posting multiple photos to Facebook', { pageId, photoCount: postDetail.media!.length });
+    await rateLimiterService.waitForRateLimit("facebook", pageId, "feed");
+    logger.info("Posting multiple photos to Facebook", {
+      pageId,
+      photoCount: postDetail.media!.length,
+    });
 
     // Upload photos first
     const photoIds: string[] = [];
@@ -309,7 +347,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
           params: {
             access_token: accessToken,
           },
-        }
+        },
       );
 
       photoIds.push(response.data.id);
@@ -320,17 +358,20 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       `${this.baseUrl}/${pageId}/feed`,
       {
         message: settings.message,
-        attached_media: photoIds.map(id => ({ media_fbid: id })),
+        attached_media: photoIds.map((id) => ({ media_fbid: id })),
         published: settings.published !== false,
       },
       {
         params: {
           access_token: accessToken,
         },
-      }
+      },
     );
 
-    logger.info('Multiple photos posted successfully', { pageId, postId: response.data.id });
+    logger.info("Multiple photos posted successfully", {
+      pageId,
+      postId: response.data.id,
+    });
     return response.data.id;
   }
 
@@ -338,23 +379,28 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     pageId: string,
     accessToken: string,
     postDetail: PostDetails,
-    settings: FacebookPageSettings
+    settings: FacebookPageSettings,
   ): Promise<string> {
-    await rateLimiterService.waitForRateLimit('facebook', pageId, 'videos');
+    await rateLimiterService.waitForRateLimit("facebook", pageId, "videos");
 
     const videoPath = postDetail.media![0].path;
     const fileSize = getFileSize(videoPath);
 
     if (!validateVideoSize(fileSize)) {
-      throw new Error('Video size must not exceed 10GB');
+      throw new Error("Video size must not exceed 10GB");
     }
 
-    logger.info('Posting video to Facebook', { pageId, videoPath, fileSize });
+    logger.info("Posting video to Facebook", { pageId, videoPath, fileSize });
 
     // Upload video with resumable upload
-    const videoId = await uploadVideoResumable(pageId, accessToken, videoPath, (progress) => {
-      console.log(`Video upload progress: ${progress.toFixed(2)}%`);
-    });
+    const videoId = await uploadVideoResumable(
+      pageId,
+      accessToken,
+      videoPath,
+      (progress) => {
+        console.log(`Video upload progress: ${progress.toFixed(2)}%`);
+      },
+    );
 
     // Poll for video processing
     await pollVideoStatus(videoId, accessToken);
@@ -369,17 +415,17 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         params: {
           access_token: accessToken,
         },
-      }
+      },
     );
 
-    logger.info('Video posted successfully', { pageId, videoId });
+    logger.info("Video posted successfully", { pageId, videoId });
     return videoId;
   }
 
   async analytics(
     id: string,
     accessToken: string,
-    date: number
+    date: number,
   ): Promise<AnalyticsData[]> {
     try {
       const startDate = new Date(date);
@@ -388,18 +434,16 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       const until = Math.floor(endDate.getTime() / 1000);
 
       // Fetch page insights
-      const response = await axios.get(
-        `${this.baseUrl}/${id}/insights`,
-        {
-          params: {
-            access_token: accessToken,
-            metric: 'page_impressions,page_engaged_users,page_post_engagements,page_fans',
-            period: 'day',
-            since,
-            until,
-          },
-        }
-      );
+      const response = await axios.get(`${this.baseUrl}/${id}/insights`, {
+        params: {
+          access_token: accessToken,
+          metric:
+            "page_impressions,page_engaged_users,page_post_engagements,page_fans",
+          period: "day",
+          since,
+          until,
+        },
+      });
 
       const insights = response.data.data || [];
 
@@ -412,32 +456,34 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         insight.values.forEach((value: any) => {
           const date = formatDate(new Date(value.end_time));
 
-          if (insight.name === 'page_impressions') {
+          if (insight.name === "page_impressions") {
             impressionsData.push({ date, total: value.value });
-          } else if (insight.name === 'page_engaged_users') {
+          } else if (insight.name === "page_engaged_users") {
             engagedUsersData.push({ date, total: value.value });
-          } else if (insight.name === 'page_post_engagements') {
+          } else if (insight.name === "page_post_engagements") {
             engagementsData.push({ date, total: value.value });
-          } else if (insight.name === 'page_fans') {
+          } else if (insight.name === "page_fans") {
             fansData.push({ date, total: value.value });
           }
         });
       });
 
       return [
-        { label: 'Impressions', data: impressionsData },
-        { label: 'Engaged Users', data: engagedUsersData },
-        { label: 'Post Engagements', data: engagementsData },
-        { label: 'Page Fans', data: fansData },
+        { label: "Impressions", data: impressionsData },
+        { label: "Engaged Users", data: engagedUsersData },
+        { label: "Post Engagements", data: engagementsData },
+        { label: "Page Fans", data: fansData },
       ];
     } catch (error: any) {
-      console.error('Facebook analytics error:', error);
+      console.error("Facebook analytics error:", error);
       return [];
     }
   }
 
-  public override handleErrors(body: string):
-    | { type: 'refresh-token' | 'bad-body' | 'retry'; value: string }
+  public override handleErrors(
+    body: string,
+  ):
+    | { type: "refresh-token" | "bad-body" | "retry"; value: string }
     | undefined {
     return mapFacebookError(body);
   }
@@ -449,13 +495,17 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
   async postStory(
     pageId: string,
     accessToken: string,
-    settings: FacebookStorySettings
+    settings: FacebookStorySettings,
   ): Promise<string> {
-    await rateLimiterService.waitForRateLimit('facebook', pageId, 'stories');
+    await rateLimiterService.waitForRateLimit("facebook", pageId, "stories");
 
-    logger.info('Posting story to Facebook', { pageId, mediaType: settings.mediaType });
+    logger.info("Posting story to Facebook", {
+      pageId,
+      mediaType: settings.mediaType,
+    });
 
-    const endpoint = settings.mediaType === 'video' ? 'video_stories' : 'photo_stories';
+    const endpoint =
+      settings.mediaType === "video" ? "video_stories" : "photo_stories";
 
     const response = await axios.post<FacebookPostResponse>(
       `${this.baseUrl}/${pageId}/${endpoint}`,
@@ -467,10 +517,13 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         params: {
           access_token: accessToken,
         },
-      }
+      },
     );
 
-    logger.info('Story posted successfully', { pageId, storyId: response.data.id });
+    logger.info("Story posted successfully", {
+      pageId,
+      storyId: response.data.id,
+    });
     return response.data.id;
   }
 
@@ -481,14 +534,17 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
   async postCarousel(
     pageId: string,
     accessToken: string,
-    settings: FacebookCarouselSettings
+    settings: FacebookCarouselSettings,
   ): Promise<string> {
-    await rateLimiterService.waitForRateLimit('facebook', pageId, 'feed');
+    await rateLimiterService.waitForRateLimit("facebook", pageId, "feed");
 
-    logger.info('Posting carousel to Facebook', { pageId, cardCount: settings.cards.length });
+    logger.info("Posting carousel to Facebook", {
+      pageId,
+      cardCount: settings.cards.length,
+    });
 
     if (settings.cards.length < 2 || settings.cards.length > 10) {
-      throw new Error('Carousel must have between 2 and 10 cards');
+      throw new Error("Carousel must have between 2 and 10 cards");
     }
 
     // Upload all images first and get their IDs
@@ -504,7 +560,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
           params: {
             access_token: accessToken,
           },
-        }
+        },
       );
 
       attachedMedia.push({
@@ -527,10 +583,13 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         params: {
           access_token: accessToken,
         },
-      }
+      },
     );
 
-    logger.info('Carousel posted successfully', { pageId, postId: response.data.id });
+    logger.info("Carousel posted successfully", {
+      pageId,
+      postId: response.data.id,
+    });
     return response.data.id;
   }
 
@@ -541,17 +600,24 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
   async postReel(
     pageId: string,
     accessToken: string,
-    settings: FacebookReelSettings
+    settings: FacebookReelSettings,
   ): Promise<string> {
-    await rateLimiterService.waitForRateLimit('facebook', pageId, 'video_reels');
+    await rateLimiterService.waitForRateLimit(
+      "facebook",
+      pageId,
+      "video_reels",
+    );
 
-    logger.info('Posting Reel to Facebook', { pageId, videoUrl: settings.videoUrl });
+    logger.info("Posting Reel to Facebook", {
+      pageId,
+      videoUrl: settings.videoUrl,
+    });
 
     // Upload video as a reel
     const response = await axios.post<FacebookPostResponse>(
       `${this.baseUrl}/${pageId}/video_reels`,
       {
-        upload_phase: 'start',
+        upload_phase: "start",
         video_url: settings.videoUrl,
         description: settings.description,
       },
@@ -559,10 +625,13 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         params: {
           access_token: accessToken,
         },
-      }
+      },
     );
 
-    logger.info('Reel posted successfully', { pageId, reelId: response.data.id });
+    logger.info("Reel posted successfully", {
+      pageId,
+      reelId: response.data.id,
+    });
     return response.data.id;
   }
 }

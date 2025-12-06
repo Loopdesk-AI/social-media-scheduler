@@ -1,8 +1,10 @@
-import { prisma } from '../database/prisma.client';
-import { integrationManager } from '../providers/integration.manager';
-import { encrypt, decrypt } from './encryption.service';
-import dayjs from 'dayjs';
-import { NotFoundError, ValidationError } from '../utils/errors';
+import { db } from "../database/db";
+import { integrations, users } from "../database/schema";
+import { eq, and, isNull } from "drizzle-orm";
+import { integrationManager } from "../providers/integration.manager";
+import { encrypt, decrypt } from "./encryption.service";
+import dayjs from "dayjs";
+import { NotFoundError, ValidationError } from "../utils/errors";
 
 /**
  * Integration Service
@@ -56,16 +58,18 @@ class IntegrationService {
   private getUserIdFromState(state: string): string | null {
     console.log(`🔍 Looking up state: ${state}`);
     console.log(`📊 State store size: ${this.stateStore.size}`);
-    console.log(`📋 Available states: ${Array.from(this.stateStore.keys()).join(', ')}`);
-    
+    console.log(
+      `📋 Available states: ${Array.from(this.stateStore.keys()).join(", ")}`,
+    );
+
     const data = this.stateStore.get(state);
     if (!data) {
       console.log(`❌ State not found: ${state}`);
       return null;
     }
-    
+
     console.log(`✅ State found: ${state} → userId: ${data.userId}`);
-    
+
     // Delete state after use (one-time use)
     this.stateStore.delete(state);
     return data.userId;
@@ -79,28 +83,30 @@ class IntegrationService {
     code: string,
     state: string,
     userIdFromParam?: string,
-    selectedAccountId?: string
+    selectedAccountId?: string,
   ) {
     try {
       // Get userId from state or parameter
       let userId: string | null = this.getUserIdFromState(state);
-      
+
       if (!userId && userIdFromParam) {
         // Fallback to parameter (for backward compatibility)
         userId = userIdFromParam;
       }
 
       if (!userId) {
-        throw new ValidationError('Invalid OAuth state: user session not found');
+        throw new ValidationError(
+          "Invalid OAuth state: user session not found",
+        );
       }
 
       // Verify user exists
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
       });
 
       if (!user) {
-        throw new ValidationError('User not found');
+        throw new ValidationError("User not found");
       }
 
       const socialProvider = integrationManager.getSocialIntegration(provider);
@@ -108,46 +114,68 @@ class IntegrationService {
       // Authenticate and get tokens
       const authDetails = await socialProvider.authenticate({
         code,
-        codeVerifier: '', // Not used for server-side flow
+        codeVerifier: "", // Not used for server-side flow
       });
 
-      // For Instagram, we no longer need to get Facebook Pages (new API as of July 2024)
-      // Instagram accounts can be connected directly without Facebook Page selection
-      if (provider === 'instagram') {
-        // No additional steps needed - we already have the Instagram account information
-        // The authDetails already contains the Instagram account information
-      }
+      // Log token details for debugging
+      console.log(`🔐 OAuth callback for ${provider}:`);
+      console.log(
+        `   - Access token received: ${authDetails.accessToken ? "Yes" : "No"}`,
+      );
+      console.log(
+        `   - Refresh token received: ${authDetails.refreshToken ? "Yes" : "No"}`,
+      );
+      console.log(`   - Token expires in: ${authDetails.expiresIn} seconds`);
 
       // Encrypt tokens
       const encryptedToken = encrypt(authDetails.accessToken);
+      // Only encrypt refresh token if we got a new one (Google only sends it on first auth)
       const encryptedRefreshToken = authDetails.refreshToken
         ? encrypt(authDetails.refreshToken)
         : null;
 
       // Calculate expiration
       const tokenExpiration = dayjs()
-        .add(authDetails.expiresIn, 'seconds')
+        .add(authDetails.expiresIn, "seconds")
         .toDate();
 
       // Check if integration already exists
-      const existingIntegration = await prisma.integration.findFirst({
-        where: {
-          userId,
-          internalId: authDetails.id,
-          providerIdentifier: provider,
-        },
+      const existingIntegration = await db.query.integrations.findFirst({
+        where: and(
+          eq(integrations.userId, userId),
+          eq(integrations.internalId, authDetails.id),
+          eq(integrations.providerIdentifier, provider),
+        ),
       });
 
       let integration;
       if (existingIntegration) {
         // Update existing integration
-        integration = await prisma.integration.update({
-          where: { id: existingIntegration.id },
-          data: {
+        // IMPORTANT: Preserve existing refresh token if Google didn't send a new one
+        // Google only returns refresh_token on the FIRST authorization, not on subsequent ones
+        const refreshTokenToStore =
+          encryptedRefreshToken || existingIntegration.refreshToken;
+
+        console.log(
+          `   - Existing refresh token in DB: ${existingIntegration.refreshToken ? "Yes" : "No"}`,
+        );
+        console.log(
+          `   - Using refresh token: ${refreshTokenToStore ? "Yes (preserved or new)" : "No (PROBLEM!)"}`,
+        );
+
+        if (!refreshTokenToStore) {
+          console.warn(
+            `⚠️  WARNING: No refresh token available for ${provider}. Token refresh will fail!`,
+          );
+        }
+
+        const [updated] = await db
+          .update(integrations)
+          .set({
             name: authDetails.name,
             picture: authDetails.picture,
             token: encryptedToken,
-            refreshToken: encryptedRefreshToken,
+            refreshToken: refreshTokenToStore,
             tokenExpiration,
             disabled: false,
             refreshNeeded: false,
@@ -155,28 +183,43 @@ class IntegrationService {
             profile: JSON.stringify({
               username: authDetails.username,
             }),
-          },
-        });
-        console.log(`✅ Updated integration: ${integration.name} (${provider})`);
+            updatedAt: new Date(),
+          })
+          .where(eq(integrations.id, existingIntegration.id))
+          .returning();
+        integration = updated;
+        console.log(
+          `✅ Updated integration: ${integration.name} (${provider})`,
+        );
       } else {
         // Create new integration
-        integration = await prisma.integration.create({
-          data: {
+        if (!encryptedRefreshToken) {
+          console.warn(
+            `⚠️  WARNING: No refresh token received for new ${provider} integration. Token refresh will fail!`,
+          );
+        }
+
+        const [created] = await db
+          .insert(integrations)
+          .values({
             internalId: authDetails.id,
             userId,
             name: authDetails.name,
             picture: authDetails.picture,
             providerIdentifier: provider,
-            type: 'social',
+            type: "social",
             token: encryptedToken,
             refreshToken: encryptedRefreshToken,
             tokenExpiration,
             profile: JSON.stringify({
               username: authDetails.username,
             }),
-          },
-        });
-        console.log(`✅ Created integration: ${integration.name} (${provider})`);
+          })
+          .returning();
+        integration = created;
+        console.log(
+          `✅ Created integration: ${integration.name} (${provider})`,
+        );
       }
 
       return {
@@ -186,7 +229,7 @@ class IntegrationService {
         providerIdentifier: integration.providerIdentifier,
       };
     } catch (error) {
-      console.error('OAuth callback error:', error);
+      console.error("OAuth callback error:", error);
       throw error;
     }
   }
@@ -195,18 +238,16 @@ class IntegrationService {
    * List integrations for user by type
    */
   async getIntegrationsByUserIdAndType(userId: string, type: string) {
-    const integrations = await prisma.integration.findMany({
-      where: {
-        userId,
-        type,
-        deletedAt: null,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+    const results = await db.query.integrations.findMany({
+      where: and(
+        eq(integrations.userId, userId),
+        eq(integrations.type, type),
+        isNull(integrations.deletedAt),
+      ),
+      orderBy: (integrations, { desc }) => [desc(integrations.createdAt)],
     });
 
-    return integrations.map((integration: any) => {
+    return results.map((integration) => {
       const isExpired = integration.tokenExpiration
         ? dayjs(integration.tokenExpiration).isBefore(dayjs())
         : false;
@@ -230,11 +271,8 @@ class IntegrationService {
    * Get single integration by ID
    */
   async getIntegrationById(id: string) {
-    const integration = await prisma.integration.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
+    const integration = await db.query.integrations.findFirst({
+      where: and(eq(integrations.id, id), isNull(integrations.deletedAt)),
     });
 
     if (!integration) {
@@ -267,17 +305,15 @@ class IntegrationService {
    * List all integrations for user
    */
   async listIntegrations(userId: string) {
-    const integrations = await prisma.integration.findMany({
-      where: {
-        userId,
-        deletedAt: null,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+    const results = await db.query.integrations.findMany({
+      where: and(
+        eq(integrations.userId, userId),
+        isNull(integrations.deletedAt),
+      ),
+      orderBy: (integrations, { desc }) => [desc(integrations.createdAt)],
     });
 
-    return integrations.map((integration: any) => {
+    return results.map((integration) => {
       const isExpired = integration.tokenExpiration
         ? dayjs(integration.tokenExpiration).isBefore(dayjs())
         : false;
@@ -301,16 +337,16 @@ class IntegrationService {
    * Get single integration
    */
   async getIntegration(id: string, userId: string) {
-    const integration = await prisma.integration.findFirst({
-      where: {
-        id,
-        userId,
-        deletedAt: null,
-      },
+    const integration = await db.query.integrations.findFirst({
+      where: and(
+        eq(integrations.id, id),
+        eq(integrations.userId, userId),
+        isNull(integrations.deletedAt),
+      ),
     });
 
     if (!integration) {
-      throw new NotFoundError('Integration not found');
+      throw new NotFoundError("Integration not found");
     }
 
     return integration;
@@ -323,22 +359,23 @@ class IntegrationService {
     const integration = await this.getIntegration(id, userId);
 
     // Cancel all scheduled posts for this integration
-    await prisma.post.updateMany({
-      where: {
-        integrationId: id,
-        state: 'QUEUE',
-        deletedAt: null,
-      },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
+    const { posts } = await import("../database/schema");
+    await db
+      .update(posts)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(posts.integrationId, id),
+          eq(posts.state, "QUEUE"),
+          isNull(posts.deletedAt),
+        ),
+      );
 
     // Soft delete integration
-    await prisma.integration.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
+    await db
+      .update(integrations)
+      .set({ deletedAt: new Date() })
+      .where(eq(integrations.id, id));
 
     console.log(`🗑️  Deleted integration: ${integration.name}`);
 
@@ -351,10 +388,11 @@ class IntegrationService {
   async toggleIntegration(id: string, userId: string) {
     const integration = await this.getIntegration(id, userId);
 
-    const updated = await prisma.integration.update({
-      where: { id },
-      data: { disabled: !integration.disabled },
-    });
+    const [updated] = await db
+      .update(integrations)
+      .set({ disabled: !integration.disabled })
+      .where(eq(integrations.id, id))
+      .returning();
 
     return {
       id: updated.id,
@@ -365,43 +403,63 @@ class IntegrationService {
   /**
    * Reconnect integration with new OAuth flow
    */
-  async reconnectIntegration(
-    id: string,
-    code: string,
-    userId: string
-  ) {
+  async reconnectIntegration(id: string, code: string, userId: string) {
     const integration = await this.getIntegration(id, userId);
     const provider = integrationManager.getSocialIntegration(
-      integration.providerIdentifier
+      integration.providerIdentifier,
     );
 
     // Authenticate with new code
     const authDetails = await provider.authenticate({
       code,
-      codeVerifier: '',
+      codeVerifier: "",
     });
 
     // Encrypt new tokens
     const encryptedToken = encrypt(authDetails.accessToken);
+    // Only encrypt refresh token if we got a new one (Google only sends it on first auth)
     const encryptedRefreshToken = authDetails.refreshToken
       ? encrypt(authDetails.refreshToken)
       : null;
 
+    // IMPORTANT: Preserve existing refresh token if provider didn't send a new one
+    // Google only returns refresh_token on the FIRST authorization, not on subsequent ones
+    const refreshTokenToStore =
+      encryptedRefreshToken || integration.refreshToken;
+
+    console.log(`🔄 Reconnecting integration ${integration.name}:`);
+    console.log(
+      `   - New refresh token received: ${authDetails.refreshToken ? "Yes" : "No"}`,
+    );
+    console.log(
+      `   - Existing refresh token in DB: ${integration.refreshToken ? "Yes" : "No"}`,
+    );
+    console.log(
+      `   - Using refresh token: ${refreshTokenToStore ? "Yes (preserved or new)" : "No (PROBLEM!)"}`,
+    );
+
+    if (!refreshTokenToStore) {
+      console.warn(
+        `⚠️  WARNING: No refresh token available after reconnect. Token refresh will fail!`,
+      );
+    }
+
     // Calculate expiration
     const tokenExpiration = dayjs()
-      .add(authDetails.expiresIn, 'seconds')
+      .add(authDetails.expiresIn, "seconds")
       .toDate();
 
     // Update integration
-    await prisma.integration.update({
-      where: { id },
-      data: {
+    await db
+      .update(integrations)
+      .set({
         token: encryptedToken,
-        refreshToken: encryptedRefreshToken,
+        refreshToken: refreshTokenToStore,
         tokenExpiration,
         refreshNeeded: false,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(integrations.id, id));
 
     console.log(`🔄 Reconnected integration: ${integration.name}`);
 
@@ -414,7 +472,7 @@ class IntegrationService {
   async createOrUpdateStorageIntegration(
     userId: string,
     providerIdentifier: string,
-    authDetails: any
+    authDetails: any,
   ) {
     // Encrypt tokens
     const encryptedToken = encrypt(authDetails.accessToken);
@@ -428,25 +486,49 @@ class IntegrationService {
       : null;
 
     // Check if integration already exists
-    const existingIntegration = await prisma.integration.findFirst({
-      where: {
-        userId,
-        internalId: authDetails.id,
-        providerIdentifier,
-        type: 'storage',
-      },
+    const existingIntegration = await db.query.integrations.findFirst({
+      where: and(
+        eq(integrations.userId, userId),
+        eq(integrations.internalId, authDetails.id),
+        eq(integrations.providerIdentifier, providerIdentifier),
+        eq(integrations.type, "storage"),
+      ),
     });
 
     let integration;
     if (existingIntegration) {
       // Update existing integration
-      integration = await prisma.integration.update({
-        where: { id: existingIntegration.id },
-        data: {
+      // IMPORTANT: Preserve existing refresh token if provider didn't send a new one
+      // Google only returns refresh_token on the FIRST authorization, not on subsequent ones
+      const refreshTokenToStore =
+        encryptedRefreshToken || existingIntegration.refreshToken;
+
+      console.log(
+        `🔄 Updating storage integration ${existingIntegration.name}:`,
+      );
+      console.log(
+        `   - New refresh token received: ${authDetails.refreshToken ? "Yes" : "No"}`,
+      );
+      console.log(
+        `   - Existing refresh token in DB: ${existingIntegration.refreshToken ? "Yes" : "No"}`,
+      );
+      console.log(
+        `   - Using refresh token: ${refreshTokenToStore ? "Yes (preserved or new)" : "No (PROBLEM!)"}`,
+      );
+
+      if (!refreshTokenToStore) {
+        console.warn(
+          `⚠️  WARNING: No refresh token available for storage integration. Token refresh will fail!`,
+        );
+      }
+
+      const [updated] = await db
+        .update(integrations)
+        .set({
           name: authDetails.name,
           picture: authDetails.picture,
           token: encryptedToken,
-          refreshToken: encryptedRefreshToken,
+          refreshToken: refreshTokenToStore,
           tokenExpiration,
           disabled: false,
           refreshNeeded: false,
@@ -454,28 +536,43 @@ class IntegrationService {
           profile: JSON.stringify({
             email: authDetails.email,
           }),
-        },
-      });
-      console.log(`✅ Updated storage integration: ${integration.name} (${providerIdentifier})`);
+          updatedAt: new Date(),
+        })
+        .where(eq(integrations.id, existingIntegration.id))
+        .returning();
+      integration = updated;
+      console.log(
+        `✅ Updated storage integration: ${integration.name} (${providerIdentifier})`,
+      );
     } else {
       // Create new integration
-      integration = await prisma.integration.create({
-        data: {
+      if (!encryptedRefreshToken) {
+        console.warn(
+          `⚠️  WARNING: No refresh token received for new storage integration. Token refresh will fail!`,
+        );
+      }
+
+      const [created] = await db
+        .insert(integrations)
+        .values({
           internalId: authDetails.id,
           userId,
           name: authDetails.name,
           picture: authDetails.picture,
           providerIdentifier,
-          type: 'storage',
+          type: "storage",
           token: encryptedToken,
           refreshToken: encryptedRefreshToken,
           tokenExpiration,
           profile: JSON.stringify({
             email: authDetails.email,
           }),
-        },
-      });
-      console.log(`✅ Created storage integration: ${integration.name} (${providerIdentifier})`);
+        })
+        .returning();
+      integration = created;
+      console.log(
+        `✅ Created storage integration: ${integration.name} (${providerIdentifier})`,
+      );
     }
 
     return {
@@ -496,39 +593,42 @@ class IntegrationService {
     name: string,
     internalId: string,
     picture?: string,
-    username?: string
+    username?: string,
   ) {
     // Only allow this in development environment
-    if (process.env.NODE_ENV !== 'development') {
-      throw new ValidationError('Test integration creation is only allowed in development mode');
+    if (process.env.NODE_ENV !== "development") {
+      throw new ValidationError(
+        "Test integration creation is only allowed in development mode",
+      );
     }
 
     // Encrypt tokens
     const encryptedToken = encrypt(accessToken);
-    
+
     // Calculate expiration (set to 60 days from now for Instagram)
-    const tokenExpiration = dayjs()
-      .add(60, 'days')
-      .toDate();
+    const tokenExpiration = dayjs().add(60, "days").toDate();
 
     // Create integration
-    const integration = await prisma.integration.create({
-      data: {
+    const [integration] = await db
+      .insert(integrations)
+      .values({
         internalId,
         userId,
         name,
         picture,
         providerIdentifier: provider,
-        type: 'social',
+        type: "social",
         token: encryptedToken,
         tokenExpiration,
         profile: JSON.stringify({
           username: username || name,
         }),
-      },
-    });
+      })
+      .returning();
 
-    console.log(`✅ Created test integration: ${integration.name} (${provider})`);
+    console.log(
+      `✅ Created test integration: ${integration.name} (${provider})`,
+    );
 
     return {
       id: integration.id,

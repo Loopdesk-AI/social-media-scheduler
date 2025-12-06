@@ -1,11 +1,18 @@
-import { Queue, Worker, Job } from 'bullmq';
-import { prisma } from '../database/prisma.client';
-import { integrationManager } from '../providers/integration.manager';
-import { decrypt } from './encryption.service';
-import { RefreshToken } from '../utils/errors';
-import { safeJsonParse } from '../utils/helpers';
-import { metricsService } from '../monitoring/metrics.service';
-import logger from '../utils/logger';
+import { Queue, Worker, Job } from "bullmq";
+import { Cluster } from "ioredis";
+import { db } from "../database/db";
+import { posts, integrations } from "../database/schema";
+import { eq } from "drizzle-orm";
+import { integrationManager } from "../providers/integration.manager";
+import { decrypt } from "./encryption.service";
+import { RefreshToken } from "../utils/errors";
+import { safeJsonParse } from "../utils/helpers";
+import logger from "../utils/logger";
+
+// Check if Redis is configured
+const REDIS_ENABLED = !!process.env.REDIS_HOST;
+const REDIS_CLUSTER_MODE = process.env.REDIS_CLUSTER_MODE === "true";
+const REDIS_TLS = process.env.REDIS_TLS === "true";
 
 /**
  * Safely serialize errors, handling circular references from axios
@@ -35,42 +42,129 @@ function serializeError(error: any): any {
 /**
  * Queue Service
  * Manages BullMQ queue and worker for processing scheduled posts
+ * Gracefully handles missing Redis connection
  */
 export class QueueService {
-  private queue: Queue;
-  private worker: Worker;
+  private queue: Queue | null = null;
+  private worker: Worker | null = null;
+  private isInitialized = false;
 
   constructor() {
-    const connection = {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-    };
+    if (!REDIS_ENABLED) {
+      logger.warn(
+        "⚠️  Redis not configured - Queue service disabled. Scheduled posts will not be processed automatically.",
+      );
+      return;
+    }
 
-    // Initialize queue
-    this.queue = new Queue('posts', { connection });
+    this.initializeQueue();
+  }
 
-    // Initialize worker in same process
-    this.worker = new Worker('posts', this.processJob.bind(this), {
-      connection,
-      concurrency: 5,
-    });
+  /**
+   * Initialize queue and worker with Redis connection
+   * Supports both standalone Redis and AWS ElastiCache cluster mode
+   */
+  private initializeQueue() {
+    try {
+      let connection: any;
 
-    // Event listeners
-    this.worker.on('completed', (job) => {
-      logger.info(`Job ${job.id} completed successfully`);
-      metricsService.queueJobsProcessed.labels('completed').inc();
-    });
+      if (REDIS_CLUSTER_MODE) {
+        // AWS ElastiCache Cluster Mode - use ioredis Cluster
+        logger.info("🔄 Initializing BullMQ with Redis cluster mode...");
 
-    this.worker.on('failed', (job, err) => {
-      logger.error(`Job ${job?.id} failed: ${err.message}`);
-      metricsService.queueJobsProcessed.labels('failed').inc();
-    });
+        const clusterNodes = [
+          {
+            host: process.env.REDIS_HOST!,
+            port: parseInt(process.env.REDIS_PORT || "6379"),
+          },
+        ];
 
-    this.worker.on('error', (err) => {
-      logger.error('Worker error:', err);
-    });
+        const clusterOptions = {
+          redisOptions: {
+            password: process.env.REDIS_PASSWORD || undefined,
+            tls: REDIS_TLS
+              ? {
+                  rejectUnauthorized: false,
+                }
+              : undefined,
+            connectTimeout: 10000,
+            maxRetriesPerRequest: 3,
+          },
+          enableReadyCheck: true,
+          clusterRetryStrategy: (times: number) => {
+            if (times > 5) {
+              logger.error("Redis cluster connection failed after 5 retries");
+              return null;
+            }
+            return Math.min(times * 200, 5000);
+          },
+        };
 
-    logger.info('BullMQ worker initialized');
+        // BullMQ supports ioredis Cluster directly
+        connection = new Cluster(clusterNodes, clusterOptions);
+      } else {
+        // Standalone Redis Mode
+        logger.info("🔄 Initializing BullMQ with standalone Redis...");
+
+        connection = {
+          host: process.env.REDIS_HOST,
+          port: parseInt(process.env.REDIS_PORT || "6379"),
+          password: process.env.REDIS_PASSWORD || undefined,
+          tls: REDIS_TLS
+            ? {
+                rejectUnauthorized: false,
+              }
+            : undefined,
+          connectTimeout: 10000,
+          maxRetriesPerRequest: 3,
+          retryStrategy: (times: number) => {
+            if (times > 5) {
+              logger.error("Redis connection failed after 5 retries");
+              return null;
+            }
+            return Math.min(times * 200, 5000);
+          },
+        };
+      }
+
+      // Initialize queue
+      this.queue = new Queue("posts", { connection });
+
+      // Initialize worker in same process
+      this.worker = new Worker("posts", this.processJob.bind(this), {
+        connection,
+        concurrency: 5,
+      });
+
+      // Event listeners
+      this.worker.on("completed", (job) => {
+        logger.info(`Job ${job.id} completed successfully`);
+      });
+
+      this.worker.on("failed", (job, err) => {
+        logger.error(`Job ${job?.id} failed: ${err.message}`);
+      });
+
+      this.worker.on("error", (err) => {
+        logger.error("Worker error:", serializeError(err));
+      });
+
+      this.isInitialized = true;
+      logger.info("BullMQ worker initialized");
+    } catch (error) {
+      logger.error(
+        "Failed to initialize queue service:",
+        serializeError(error),
+      );
+      this.isInitialized = false;
+    }
+  }
+
+  /**
+   * Check if queue service is available
+   */
+  isAvailable(): boolean {
+    return this.isInitialized && this.queue !== null;
   }
 
   /**
@@ -80,11 +174,22 @@ export class QueueService {
    * @param priority Job priority (1-10, higher = more urgent)
    * @returns Job ID
    */
-  async addJob(postId: string, publishDate: Date, priority: number = 5): Promise<string> {
+  async addJob(
+    postId: string,
+    publishDate: Date,
+    priority = 5,
+  ): Promise<string> {
+    if (!this.isAvailable() || !this.queue) {
+      logger.warn(
+        `Queue not available - post ${postId} scheduled but won't be auto-published`,
+      );
+      return `mock-job-${postId}`;
+    }
+
     const delay = publishDate.getTime() - Date.now();
 
     if (delay < 0) {
-      throw new Error('Publish date must be in the future');
+      throw new Error("Publish date must be in the future");
     }
 
     // Check for duplicate jobs
@@ -95,14 +200,14 @@ export class QueueService {
     }
 
     const job = await this.queue.add(
-      'publish-post',
+      "publish-post",
       { postId },
       {
         delay,
         priority, // Higher priority jobs are processed first
         attempts: 1, // NO retries - if it fails, it fails
         backoff: {
-          type: 'exponential',
+          type: "exponential",
           delay: 2000, // Start with 2s
         },
         removeOnComplete: {
@@ -113,10 +218,12 @@ export class QueueService {
           age: 604800, // Keep failed jobs for 7 days
         },
         jobId: `post-${postId}`, // Unique job ID for deduplication
-      }
+      },
     );
 
-    logger.info(`Scheduled job ${job.id} for post ${postId} in ${Math.round(delay / 1000)}s with priority ${priority}`);
+    logger.info(
+      `Scheduled job ${job.id} for post ${postId} in ${Math.round(delay / 1000)}s with priority ${priority}`,
+    );
     return job.id!;
   }
 
@@ -124,6 +231,7 @@ export class QueueService {
    * Find job by post ID
    */
   private async findJobByPostId(postId: string): Promise<Job | null> {
+    if (!this.queue) return null;
     const jobId = `post-${postId}`;
     const job = await this.queue.getJob(jobId);
     return job || null;
@@ -134,6 +242,10 @@ export class QueueService {
    * @param jobId Job ID to remove
    */
   async removeJob(jobId: string): Promise<void> {
+    if (!this.queue) {
+      logger.warn(`Queue not available - cannot remove job ${jobId}`);
+      return;
+    }
     const job = await this.queue.getJob(jobId);
     if (job) {
       await job.remove();
@@ -147,45 +259,46 @@ export class QueueService {
    */
   async processJob(job: Job): Promise<void> {
     const { postId } = job.data;
-    const startTime = Date.now();
 
     logger.info(`Processing job ${job.id} for post ${postId}`);
 
     // 1. Fetch post with integration
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      include: { integration: true },
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: {
+        integration: true,
+      },
     });
 
     if (!post) {
       throw new Error(`Post ${postId} not found`);
     }
 
-    if (post.state !== 'QUEUE') {
+    if (post.state !== "QUEUE") {
       console.log(`⏭️  Post ${postId} is not in QUEUE state, skipping`);
       return;
     }
 
     // 2. Get provider
     // Check if this is a storage integration - publishing is only for social integrations
-    if (post.integration.type === 'storage') {
-      throw new Error('Cannot publish posts to storage integrations');
+    if (post.integration.type === "storage") {
+      throw new Error("Cannot publish posts to storage integrations");
     }
 
     const provider = integrationManager.getSocialIntegration(
-      post.integration.providerIdentifier
+      post.integration.providerIdentifier,
     );
 
     // 3. Decrypt token
     const accessToken = decrypt(post.integration.token);
 
     // 4. Parse settings and prepare post details
-    // Prisma returns Json fields as objects, not strings
-    const settings: any = typeof post.settings === 'string'
-      ? safeJsonParse(post.settings, {})
-      : (post.settings || {});
+    const settings: any =
+      typeof post.settings === "string"
+        ? safeJsonParse(post.settings, {})
+        : post.settings || {};
 
-    console.log('🔍 DEBUG queue.service - Post settings:', settings);
+    console.log("🔍 DEBUG queue.service - Post settings:", settings);
 
     const postDetails = [
       {
@@ -196,7 +309,7 @@ export class QueueService {
       },
     ];
 
-    console.log('📦 DEBUG queue.service - postDetails:', postDetails[0]);
+    console.log("📦 DEBUG queue.service - postDetails:", postDetails[0]);
 
     // 5. Publish post
     let cleanupMedia: (() => Promise<void>) | undefined;
@@ -204,11 +317,14 @@ export class QueueService {
     try {
       // Resolve media (download from storage if needed)
       if (postDetails[0].media && postDetails[0].media.length > 0) {
-        const { mediaResolverService } = await import('./media-resolver.service');
-        const { resolvedMedia, cleanup } = await mediaResolverService.resolveMedia(
-          postDetails[0].media,
-          post.userId
+        const { mediaResolverService } = await import(
+          "./media-resolver.service"
         );
+        const { resolvedMedia, cleanup } =
+          await mediaResolverService.resolveMedia(
+            postDetails[0].media,
+            post.userId,
+          );
         postDetails[0].media = resolvedMedia;
         cleanupMedia = cleanup;
       }
@@ -216,7 +332,7 @@ export class QueueService {
       logger.info(`Publishing to ${provider.identifier}...`);
 
       // Use rate limiter with automatic retry
-      const { rateLimiterService } = await import('./rate-limiter.service');
+      const { rateLimiterService } = await import("./rate-limiter.service");
 
       const result = await rateLimiterService.withRetry(
         async () => {
@@ -224,62 +340,49 @@ export class QueueService {
             post.integration.internalId,
             accessToken,
             postDetails,
-            post.integration
+            post.integration,
           );
         },
         {
           platform: provider.identifier as any,
           userId: post.userId,
-          endpoint: 'post',
+          endpoint: "post",
           maxAttempts: 5,
           baseDelay: 2000,
           maxDelay: 60000,
           onRetry: (attempt, error) => {
-            logger.warn(`Retry attempt ${attempt} for post ${postId}`, { error: error.message });
-
-            // Update retry count in database asynchronously
-            // Temporarily commented out due to TypeScript error
-            // prisma.post.update({
-            //   where: { id: postId },
-            //   data: {
-            //     retryCount: attempt,
-            //     lastRetryAt: new Date(),
-            //   },
-            // }).catch(err => logger.error('Failed to update retry count', err));
+            logger.warn(`Retry attempt ${attempt} for post ${postId}`, {
+              error: error.message,
+            });
           },
-        }
+        },
       );
 
-      // Record metrics
-      const duration = (Date.now() - startTime) / 1000;
-      metricsService.queueJobDuration.labels(provider.identifier).observe(duration);
-      metricsService.postsPublished.labels(provider.identifier).inc();
-
       // 6. Update post status
-      await prisma.post.update({
-        where: { id: postId },
-        data: {
-          state: 'PUBLISHED',
+      await db
+        .update(posts)
+        .set({
+          state: "PUBLISHED",
           releaseURL: result[0].releaseURL,
           releaseId: result[0].postId,
           error: null,
-        },
-      });
+          updatedAt: new Date(),
+        })
+        .where(eq(posts.id, postId));
 
-      logger.info(`Post ${postId} published successfully: ${result[0].releaseURL}`);
+      logger.info(
+        `Post ${postId} published successfully: ${result[0].releaseURL}`,
+      );
     } catch (error) {
       const serializedError = serializeError(error);
       logger.error(`Failed to publish post ${postId}:`, serializedError);
 
-      // Record failure metrics
-      const errorType = error instanceof RefreshToken ? 'token_refresh' : 'publish_error';
-      metricsService.queueJobsFailed.labels(provider.identifier).inc();
-      metricsService.postsFailed.labels(provider.identifier, errorType).inc();
-
       // Handle token refresh errors - automatically refresh the token
       if (error instanceof RefreshToken) {
         try {
-          logger.info(`🔄 Attempting to refresh token for integration ${post.integrationId}`);
+          logger.info(
+            `🔄 Attempting to refresh token for integration ${post.integrationId}`,
+          );
 
           // Get refresh token
           const refreshToken = post.integration.refreshToken
@@ -287,58 +390,66 @@ export class QueueService {
             : null;
 
           if (!refreshToken) {
-            logger.error('No refresh token available, manual reconnection required');
-            await prisma.integration.update({
-              where: { id: post.integrationId },
-              data: { refreshNeeded: true },
-            });
+            logger.error(
+              "No refresh token available, manual reconnection required",
+            );
+            await db
+              .update(integrations)
+              .set({ refreshNeeded: true })
+              .where(eq(integrations.id, post.integrationId));
           } else {
             // Refresh the token using the provider
             const newTokens = await provider.refreshToken(refreshToken);
 
             // Encrypt new tokens
-            const { encrypt } = await import('./encryption.service');
+            const { encrypt } = await import("./encryption.service");
             const encryptedToken = encrypt(newTokens.accessToken);
             const encryptedRefreshToken = newTokens.refreshToken
               ? encrypt(newTokens.refreshToken)
               : null;
 
             // Calculate new expiration
-            const tokenExpiration = new Date(Date.now() + newTokens.expiresIn * 1000);
+            const tokenExpiration = new Date(
+              Date.now() + newTokens.expiresIn * 1000,
+            );
 
             // Update integration with new tokens
-            await prisma.integration.update({
-              where: { id: post.integrationId },
-              data: {
+            await db
+              .update(integrations)
+              .set({
                 token: encryptedToken,
                 refreshToken: encryptedRefreshToken,
                 tokenExpiration,
                 refreshNeeded: false,
-              },
-            });
+                updatedAt: new Date(),
+              })
+              .where(eq(integrations.id, post.integrationId));
 
-            logger.info(`✅ Token refreshed successfully for integration ${post.integrationId}`);
+            logger.info(
+              `✅ Token refreshed successfully for integration ${post.integrationId}`,
+            );
 
             // Retry the job immediately with new token
-            throw new Error('Token refreshed, job will retry automatically');
+            throw new Error("Token refreshed, job will retry automatically");
           }
         } catch (refreshError) {
           logger.error(`Failed to refresh token:`, refreshError);
-          await prisma.integration.update({
-            where: { id: post.integrationId },
-            data: { refreshNeeded: true },
-          });
+          await db
+            .update(integrations)
+            .set({ refreshNeeded: true })
+            .where(eq(integrations.id, post.integrationId));
         }
       }
 
       // Update post with error
-      await prisma.post.update({
-        where: { id: postId },
-        data: {
-          state: 'ERROR',
-          error: error instanceof Error ? error.message : 'Unknown error',
-        },
-      });
+      await db
+        .update(posts)
+        .set({
+          state: "ERROR",
+          error: error instanceof Error ? error.message : "Unknown error",
+          updatedAt: new Date(),
+        })
+        .where(eq(posts.id, postId));
 
       // Re-throw to trigger retry
       throw error;
@@ -353,7 +464,7 @@ export class QueueService {
   /**
    * Get queue instance for monitoring
    */
-  getQueue(): Queue {
+  getQueue(): Queue | null {
     return this.queue;
   }
 
@@ -361,6 +472,18 @@ export class QueueService {
    * Get queue metrics
    */
   async getMetrics() {
+    if (!this.isAvailable() || !this.queue) {
+      return {
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+        total: 0,
+        available: false,
+      };
+    }
+
     const [waiting, active, completed, failed, delayed] = await Promise.all([
       this.queue.getWaitingCount(),
       this.queue.getActiveCount(),
@@ -376,6 +499,7 @@ export class QueueService {
       failed,
       delayed,
       total: waiting + active + completed + failed + delayed,
+      available: true,
     };
   }
 
@@ -383,9 +507,13 @@ export class QueueService {
    * Close queue and worker gracefully
    */
   async close(): Promise<void> {
-    console.log('Closing queue service...');
-    await this.worker.close();
-    await this.queue.close();
+    console.log("Closing queue service...");
+    if (this.worker) {
+      await this.worker.close();
+    }
+    if (this.queue) {
+      await this.queue.close();
+    }
   }
 }
 

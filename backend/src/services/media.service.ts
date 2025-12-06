@@ -1,31 +1,51 @@
-// Media Service - Handle file uploads and media management
-
-import { prisma } from '../database/prisma.client';
-import { storage } from '../storage/storage.factory';
-import sharp from 'sharp';
-import { randomBytes } from 'crypto';
-import { join } from 'path';
-import { stat, unlink } from 'fs/promises';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { db } from "../database/db";
+import { media } from "../database/schema";
+import { eq, and, isNull, desc } from "drizzle-orm";
+import { storage } from "../storage/storage.factory";
+import { randomBytes } from "crypto";
+import { join } from "path";
+import { unlink, access, constants } from "fs/promises";
+import { exec } from "child_process";
+import { promisify } from "util";
 
 const execAsync = promisify(exec);
+
+/**
+ * Check if ffmpeg is available on the system
+ */
+async function isFfmpegAvailable(): Promise<boolean> {
+  try {
+    await execAsync("ffmpeg -version");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a file exists
+ */
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export class MediaService {
   /**
    * Upload media file
    */
-  async uploadMedia(
-    userId: string,
-    file: Express.Multer.File
-  ): Promise<any> {
+  async uploadMedia(userId: string, file: Express.Multer.File): Promise<any> {
     // Validate file type
     const mimeType = file.mimetype;
-    const isImage = mimeType.startsWith('image/');
-    const isVideo = mimeType.startsWith('video/');
+    const isImage = mimeType.startsWith("image/");
+    const isVideo = mimeType.startsWith("video/");
 
     if (!isImage && !isVideo) {
-      throw new Error('File must be an image or video');
+      throw new Error("File must be an image or video");
     }
 
     // Validate file size
@@ -33,16 +53,16 @@ export class MediaService {
     const maxVideoSize = 5 * 1024 * 1024 * 1024; // 5GB
 
     if (isImage && file.size > maxImageSize) {
-      throw new Error('Image size must not exceed 10MB');
+      throw new Error("Image size must not exceed 10MB");
     }
 
     if (isVideo && file.size > maxVideoSize) {
-      throw new Error('Video size must not exceed 5GB');
+      throw new Error("Video size must not exceed 5GB");
     }
 
     // Generate unique filename
-    const ext = file.originalname.substring(file.originalname.lastIndexOf('.'));
-    const filename = `${randomBytes(16).toString('hex')}${ext}`;
+    const ext = file.originalname.substring(file.originalname.lastIndexOf("."));
+    const filename = `${randomBytes(16).toString("hex")}${ext}`;
     const destination = join(userId, filename);
 
     // Upload to storage
@@ -57,34 +77,36 @@ export class MediaService {
         thumbnail = await this.generateVideoThumbnail(file.path, userId);
         thumbnailTimestamp = 1000; // 1 second into video
       } catch (error) {
-        console.error('Failed to generate video thumbnail:', error);
+        console.error("Failed to generate video thumbnail:", error);
       }
     }
 
     // Create media record
-    const media = await prisma.media.create({
-      data: {
+    const [mediaRecord] = await db
+      .insert(media)
+      .values({
         name: file.originalname,
         path,
         userId,
         thumbnail,
         thumbnailTimestamp: isVideo ? thumbnailTimestamp : null,
-        type: isImage ? 'image' : 'video',
+        type: isImage ? "image" : "video",
         fileSize: file.size,
-      },
-    });
+      })
+      .returning();
 
     // Clean up temporary file
     try {
       await unlink(file.path);
     } catch (error) {
-      console.error('Failed to delete temporary file:', error);
+      console.error("Failed to delete temporary file:", error);
     }
 
     // Return media with full URL
-    const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
+    const baseUrl =
+      process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
     return {
-      ...media,
+      ...mediaRecord,
       url: `${baseUrl}/uploads/${path}`,
     };
   }
@@ -94,21 +116,60 @@ export class MediaService {
    */
   private async generateVideoThumbnail(
     videoPath: string,
-    userId: string
+    userId: string,
   ): Promise<string> {
-    const thumbnailFilename = `${randomBytes(16).toString('hex')}.jpg`;
-    const thumbnailPath = join('/tmp', thumbnailFilename);
-    const destination = join(userId, 'thumbnails', thumbnailFilename);
+    // Check if ffmpeg is available
+    const ffmpegAvailable = await isFfmpegAvailable();
+    if (!ffmpegAvailable) {
+      console.warn(
+        "⚠️  ffmpeg is not installed. Video thumbnails will not be generated.",
+      );
+      console.warn(
+        "   Install ffmpeg: brew install ffmpeg (macOS) or apt-get install ffmpeg (Linux)",
+      );
+      throw new Error("ffmpeg is not installed");
+    }
 
-    // Use ffmpeg to extract frame at 1 second
+    // Check if video file exists
+    const videoExists = await fileExists(videoPath);
+    if (!videoExists) {
+      throw new Error(`Video file not found: ${videoPath}`);
+    }
+
+    const thumbnailFilename = `${randomBytes(16).toString("hex")}.jpg`;
+    const thumbnailPath = join("/tmp", thumbnailFilename);
+    const destination = join(userId, "thumbnails", thumbnailFilename);
+
+    // Use ffmpeg to extract frame at 1 second (or 0 if video is too short)
+    // -y: overwrite output file without asking
+    // -ss 00:00:00.5: seek to 0.5 seconds (works better for short videos)
+    // -vframes 1: extract only 1 frame
+    // -q:v 2: high quality JPEG
     try {
       await execAsync(
-        `ffmpeg -i "${videoPath}" -ss 00:00:01 -vframes 1 -q:v 2 "${thumbnailPath}"`
+        `ffmpeg -y -i "${videoPath}" -ss 00:00:00.5 -vframes 1 -q:v 2 "${thumbnailPath}" 2>&1`,
       );
-    } catch (error) {
-      // If ffmpeg fails, try using sharp with first frame
-      // This is a fallback and may not work for all video formats
-      throw new Error('Failed to generate video thumbnail');
+    } catch (error: any) {
+      console.error("ffmpeg error:", error.message || error);
+      // Try again at the very beginning of the video
+      try {
+        await execAsync(
+          `ffmpeg -y -i "${videoPath}" -vframes 1 -q:v 2 "${thumbnailPath}" 2>&1`,
+        );
+      } catch (retryError: any) {
+        console.error("ffmpeg retry error:", retryError.message || retryError);
+        throw new Error(
+          `Failed to generate video thumbnail: ${retryError.message || "ffmpeg failed"}`,
+        );
+      }
+    }
+
+    // Verify thumbnail was created
+    const thumbnailExists = await fileExists(thumbnailPath);
+    if (!thumbnailExists) {
+      throw new Error(
+        `Thumbnail file was not created at ${thumbnailPath}. ffmpeg may have failed silently.`,
+      );
     }
 
     // Upload thumbnail
@@ -118,7 +179,7 @@ export class MediaService {
     try {
       await unlink(thumbnailPath);
     } catch (error) {
-      console.error('Failed to delete temporary thumbnail:', error);
+      console.error("Failed to delete temporary thumbnail:", error);
     }
 
     return path;
@@ -130,36 +191,31 @@ export class MediaService {
   async listMedia(
     userId: string,
     filters?: {
-      type?: 'image' | 'video';
+      type?: "image" | "video";
       limit?: number;
       offset?: number;
-    }
+    },
   ): Promise<any[]> {
-    const where: any = {
-      userId,
-      deletedAt: null,
-    };
+    const conditions = [eq(media.userId, userId), isNull(media.deletedAt)];
 
     if (filters?.type) {
-      where.type = filters.type;
+      conditions.push(eq(media.type, filters.type));
     }
 
-    const media = await prisma.media.findMany({
-      where,
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: filters?.limit || 50,
-      skip: filters?.offset || 0,
+    const results = await db.query.media.findMany({
+      where: and(...conditions),
+      orderBy: [desc(media.createdAt)],
+      limit: filters?.limit || 50,
+      offset: filters?.offset || 0,
     });
 
     // Add public URLs
     const mediaWithUrls = await Promise.all(
-      media.map(async (m: any) => ({
+      results.map(async (m) => ({
         ...m,
         url: await storage.getUrl(m.path),
         thumbnailUrl: m.thumbnail ? await storage.getUrl(m.thumbnail) : null,
-      }))
+      })),
     );
 
     return mediaWithUrls;
@@ -170,50 +226,32 @@ export class MediaService {
    */
   async deleteMedia(id: string, userId: string): Promise<void> {
     // Verify media belongs to user
-    const media = await prisma.media.findFirst({
-      where: {
-        id,
-        userId,
-        deletedAt: null,
-      },
+    const mediaRecord = await db.query.media.findFirst({
+      where: and(
+        eq(media.id, id),
+        eq(media.userId, userId),
+        isNull(media.deletedAt),
+      ),
     });
 
-    if (!media) {
-      throw new Error('Media not found');
-    }
-
-    // Check if media is used in scheduled posts
-    const postsUsingMedia = await prisma.post.count({
-      where: {
-        userId,
-        state: 'QUEUE',
-        deletedAt: null,
-        settings: {
-          array_contains: media.id,
-        },
-      },
-    });
-
-    if (postsUsingMedia > 0) {
-      throw new Error('Media is used in scheduled posts and cannot be deleted');
+    if (!mediaRecord) {
+      throw new Error("Media not found");
     }
 
     // Soft delete media record
-    await prisma.media.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
+    await db
+      .update(media)
+      .set({ deletedAt: new Date() })
+      .where(eq(media.id, id));
 
     // Optionally delete from storage
     try {
-      await storage.delete(media.path);
-      if (media.thumbnail) {
-        await storage.delete(media.thumbnail);
+      await storage.delete(mediaRecord.path);
+      if (mediaRecord.thumbnail) {
+        await storage.delete(mediaRecord.thumbnail);
       }
     } catch (error) {
-      console.error('Failed to delete media from storage:', error);
+      console.error("Failed to delete media from storage:", error);
     }
   }
 
@@ -221,22 +259,24 @@ export class MediaService {
    * Get media by ID
    */
   async getMedia(id: string, userId: string): Promise<any> {
-    const media = await prisma.media.findFirst({
-      where: {
-        id,
-        userId,
-        deletedAt: null,
-      },
+    const mediaRecord = await db.query.media.findFirst({
+      where: and(
+        eq(media.id, id),
+        eq(media.userId, userId),
+        isNull(media.deletedAt),
+      ),
     });
 
-    if (!media) {
-      throw new Error('Media not found');
+    if (!mediaRecord) {
+      throw new Error("Media not found");
     }
 
     return {
-      ...media,
-      url: await storage.getUrl(media.path),
-      thumbnailUrl: media.thumbnail ? await storage.getUrl(media.thumbnail) : null,
+      ...mediaRecord,
+      url: await storage.getUrl(mediaRecord.path),
+      thumbnailUrl: mediaRecord.thumbnail
+        ? await storage.getUrl(mediaRecord.thumbnail)
+        : null,
     };
   }
 }

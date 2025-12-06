@@ -21,7 +21,7 @@ This provider enables OAuth 2.0 authentication with PKCE and tweet publishing to
 3. Set app permissions: Read and Write
 4. Set Type of App: Web App
 5. Add callback URLs:
-   - Development: `http://localhost:3001/api/integrations/twitter/callback`
+   - Development: `http://localhost:3000/api/integrations/twitter/callback`
    - Production: `https://yourdomain.com/api/integrations/twitter/callback`
 6. Add website URL
 
@@ -37,7 +37,7 @@ This provider enables OAuth 2.0 authentication with PKCE and tweet publishing to
 TWITTER_CLIENT_ID=your_client_id_here
 TWITTER_CLIENT_SECRET=your_client_secret_here
 TWITTER_BEARER_TOKEN=your_bearer_token_here
-BACKEND_URL=http://localhost:3001
+BACKEND_URL=http://localhost:3000
 ```
 
 ## API Documentation
